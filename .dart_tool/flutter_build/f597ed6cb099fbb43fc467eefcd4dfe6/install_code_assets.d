@@ -1,0 +1,1 @@
+ C:\\Users\\emon6\\Desktop\\[flutter]\ [Figma_OG\ Prompt]\ ARISE\ Mobile\ App\ UI\ Design\ v11\ -\ Copy\\.dart_tool\\flutter_build\\f597ed6cb099fbb43fc467eefcd4dfe6\\native_assets.json: 
