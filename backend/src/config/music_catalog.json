@@ -1,0 +1,52 @@
+[
+  {
+    "id": "track-lofi-beats",
+    "title": "Midnight Hunter Lo-Fi",
+    "category": "lofi",
+    "artist": "ARISE Sound Lab",
+    "durationS": 1800,
+    "streamUrl": "https://cdn.arise.app/audio/midnight_hunter_lofi.mp3",
+    "coverArtUrl": "https://cdn.arise.app/covers/lofi.png",
+    "tags": ["focus", "chill", "study"]
+  },
+  {
+    "id": "track-rain-thunder",
+    "title": "Abyssal Rain & Soft Thunder",
+    "category": "nature",
+    "artist": "Nature Realm",
+    "durationS": 3600,
+    "streamUrl": "https://cdn.arise.app/audio/abyssal_rain.mp3",
+    "coverArtUrl": "https://cdn.arise.app/covers/rain.png",
+    "tags": ["rain", "sleep", "deep_work"]
+  },
+  {
+    "id": "track-brown-noise",
+    "title": "Deep Neural Brown Noise",
+    "category": "noise",
+    "artist": "Acoustic Shield",
+    "durationS": 3600,
+    "streamUrl": "https://cdn.arise.app/audio/brown_noise.mp3",
+    "coverArtUrl": "https://cdn.arise.app/covers/noise.png",
+    "tags": ["adhd", "masking", "flow"]
+  },
+  {
+    "id": "track-fantasy-dungeon",
+    "title": "Shadow Monarch Citadel",
+    "category": "fantasy",
+    "artist": "Guild Symphony",
+    "durationS": 2400,
+    "streamUrl": "https://cdn.arise.app/audio/shadow_citadel.mp3",
+    "coverArtUrl": "https://cdn.arise.app/covers/fantasy.png",
+    "tags": ["epic", "boss", "questing"]
+  },
+  {
+    "id": "track-cyber-cafe",
+    "title": "Neo-Tokyo Ambient Cafe",
+    "category": "ambience",
+    "artist": "Synth Cafe",
+    "durationS": 2700,
+    "streamUrl": "https://cdn.arise.app/audio/cyber_cafe.mp3",
+    "coverArtUrl": "https://cdn.arise.app/covers/cafe.png",
+    "tags": ["coffee", "work", "coding"]
+  }
+]

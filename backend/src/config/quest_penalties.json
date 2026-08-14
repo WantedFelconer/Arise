@@ -1,0 +1,12 @@
+{
+  "deadlineMissPenalty": {
+    "casual": {
+      "manaPenalty": 0,
+      "xpPenalty": 0
+    },
+    "hardcore": {
+      "manaPenalty": 15,
+      "xpPenalty": 0
+    }
+  }
+}

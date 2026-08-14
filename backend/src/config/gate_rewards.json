@@ -1,0 +1,21 @@
+{
+  "xpPerMinute": {
+    "trivial": 2,
+    "easy": 4,
+    "medium": 6,
+    "hard": 8,
+    "epic": 12
+  },
+  "manaRewardOnClear": 10,
+  "casualPenalty": {
+    "xpPenalty": 10,
+    "manaPenalty": 5,
+    "bossRecovery": false
+  },
+  "hardcorePenalty": {
+    "xpPenalty": 30,
+    "manaPenalty": 15,
+    "bossRecovery": true,
+    "bossRecoveryRate": 0.15
+  }
+}

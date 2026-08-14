@@ -1,0 +1,111 @@
+[
+  {
+    "id": "ach-first-quest",
+    "code": "first_quest_completed",
+    "title": "First Step of the Hunter",
+    "description": "Complete your first quest.",
+    "category": "quests",
+    "xpReward": 50,
+    "badgeAssetUrl": "https://assets.arise.app/badges/first_quest.png",
+    "criteria": {
+      "event": "quest_complete"
+    }
+  },
+  {
+    "id": "ach-quest-master-10",
+    "code": "quest_apprentice",
+    "title": "Quest Apprentice",
+    "description": "Complete 10 quests.",
+    "category": "quests",
+    "xpReward": 200,
+    "badgeAssetUrl": "https://assets.arise.app/badges/quest_10.png",
+    "criteria": {
+      "minQuestsCompleted": 10
+    }
+  },
+  {
+    "id": "ach-gate-initiate",
+    "code": "gate_initiate",
+    "title": "Gate Explorer",
+    "description": "Clear your first Gate focus session with >=80% stability.",
+    "category": "gates",
+    "xpReward": 100,
+    "badgeAssetUrl": "https://assets.arise.app/badges/gate_initiate.png",
+    "criteria": {
+      "event": "gate_clear",
+      "minStability": 80
+    }
+  },
+  {
+    "id": "ach-gate-master-5",
+    "code": "gate_master",
+    "title": "Gate Dominator",
+    "description": "Clear 5 Gate focus sessions.",
+    "category": "gates",
+    "xpReward": 300,
+    "badgeAssetUrl": "https://assets.arise.app/badges/gate_master.png",
+    "criteria": {
+      "minGatesCleared": 5
+    }
+  },
+  {
+    "id": "ach-boss-slayer",
+    "code": "boss_slayer",
+    "title": "Dungeon Boss Slayer",
+    "description": "Defeat your first project Boss.",
+    "category": "bosses",
+    "xpReward": 250,
+    "badgeAssetUrl": "https://assets.arise.app/badges/boss_slayer.png",
+    "criteria": {
+      "event": "boss_defeat"
+    }
+  },
+  {
+    "id": "ach-streak-3",
+    "code": "streak_3_days",
+    "title": "Consistent Awakening",
+    "description": "Maintain an active streak for 3 consecutive days.",
+    "category": "streaks",
+    "xpReward": 150,
+    "badgeAssetUrl": "https://assets.arise.app/badges/streak_3.png",
+    "criteria": {
+      "minStreak": 3
+    }
+  },
+  {
+    "id": "ach-streak-7",
+    "code": "streak_7_days",
+    "title": "Unstoppable Flow",
+    "description": "Maintain an active streak for 7 consecutive days.",
+    "category": "streaks",
+    "xpReward": 400,
+    "badgeAssetUrl": "https://assets.arise.app/badges/streak_7.png",
+    "criteria": {
+      "minStreak": 7
+    }
+  },
+  {
+    "id": "ach-fitness-pioneer",
+    "code": "fitness_pioneer",
+    "title": "Physical Ascendant",
+    "description": "Log a fitness activity exceeding daily thresholds.",
+    "category": "fitness",
+    "xpReward": 100,
+    "badgeAssetUrl": "https://assets.arise.app/badges/fitness_pioneer.png",
+    "criteria": {
+      "event": "fitness_logged"
+    }
+  },
+  {
+    "id": "ach-level-5",
+    "code": "level_5",
+    "title": "Rank Ascension",
+    "description": "Reach Character Level 5.",
+    "category": "progression",
+    "xpReward": 250,
+    "badgeAssetUrl": "https://assets.arise.app/badges/level_5.png",
+    "criteria": {
+      "minLevel": 5
+    }
+  }
+]

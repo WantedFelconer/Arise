@@ -1,0 +1,28 @@
+{
+  "thresholds": {
+    "steps": [
+      { "min": 5000, "xp": 25, "mana": 5, "statKey": "fitness", "label": "5,000 Steps Daily" },
+      { "min": 8000, "xp": 50, "mana": 10, "statKey": "fitness", "label": "8,000 Steps Daily" },
+      { "min": 12000, "xp": 80, "mana": 15, "statKey": "fitness", "label": "12,000 Steps Master" }
+    ],
+    "workout": [
+      { "min": 15, "xp": 30, "mana": 5, "statKey": "fitness", "label": "15 Min Quick Session" },
+      { "min": 30, "xp": 60, "mana": 15, "statKey": "fitness", "label": "30 Min Solid Workout" },
+      { "min": 60, "xp": 100, "mana": 25, "statKey": "fitness", "label": "60 Min Heavy Training" }
+    ],
+    "sleep": [
+      { "min": 6, "xp": 20, "mana": 10, "statKey": "health", "label": "6 Hours Baseline Sleep" },
+      { "min": 7, "xp": 40, "mana": 20, "statKey": "health", "label": "7+ Hours Restorative Sleep" },
+      { "min": 8, "xp": 50, "mana": 25, "statKey": "health", "label": "8 Hours Optimal Recovery" }
+    ],
+    "water": [
+      { "min": 1500, "xp": 15, "mana": 5, "statKey": "health", "label": "1.5L Hydration" },
+      { "min": 2000, "xp": 25, "mana": 10, "statKey": "health", "label": "2L Optimal Hydration" },
+      { "min": 3000, "xp": 40, "mana": 15, "statKey": "health", "label": "3L Peak Hydration" }
+    ],
+    "calories": [
+      { "min": 300, "xp": 25, "mana": 5, "statKey": "fitness", "label": "300 Active Calories" },
+      { "min": 500, "xp": 50, "mana": 10, "statKey": "fitness", "label": "500 Active Calories" }
+    ]
+  }
+}

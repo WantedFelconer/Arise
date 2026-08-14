@@ -1,0 +1,14 @@
+{
+  "casual": {
+    "xpMultiplier": 1.0,
+    "gateCollapsePenalty": 0.05,
+    "bossHpRecovery": false,
+    "aiAssistanceLevel": "high"
+  },
+  "hardcore": {
+    "xpMultiplier": 1.5,
+    "gateCollapsePenalty": 0.20,
+    "bossHpRecovery": true,
+    "aiAssistanceLevel": "low"
+  }
+}

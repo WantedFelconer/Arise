@@ -1,0 +1,8 @@
+[
+  { "rank": "E", "minLevel": 1, "maxLevel": 9 },
+  { "rank": "D", "minLevel": 10, "maxLevel": 24 },
+  { "rank": "C", "minLevel": 25, "maxLevel": 44 },
+  { "rank": "B", "minLevel": 45, "maxLevel": 69 },
+  { "rank": "A", "minLevel": 70, "maxLevel": 99 },
+  { "rank": "S", "minLevel": 100, "maxLevel": 9999 }
+]

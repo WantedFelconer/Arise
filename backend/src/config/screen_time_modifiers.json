@@ -1,0 +1,35 @@
+{
+  "categories": {
+    "productive": {
+      "name": "Productive",
+      "manaModifierPer30Min": 2,
+      "manaModifierPerMinute": 0.0667,
+      "defaultApps": ["com.microsoft.vscode", "com.jetbrains.intellij", "com.linear", "com.notion.id"]
+    },
+    "educational": {
+      "name": "Educational",
+      "manaModifierPer30Min": 3,
+      "manaModifierPerMinute": 0.1,
+      "defaultApps": ["com.duolingo", "org.coursera.android", "org.khanacademy.android", "com.oreilly.learning"]
+    },
+    "communication": {
+      "name": "Communication",
+      "manaModifierPer30Min": -1,
+      "manaModifierPerMinute": -0.0333,
+      "defaultApps": ["com.slack", "com.discord", "com.whatsapp", "com.google.android.talk"]
+    },
+    "entertainment": {
+      "name": "Entertainment",
+      "manaModifierPer30Min": -4,
+      "manaModifierPerMinute": -0.1333,
+      "defaultApps": ["com.netflix.mediaclient", "com.spotify.music", "com.google.android.youtube"]
+    },
+    "high_distraction": {
+      "name": "High Distraction",
+      "manaModifierPer30Min": -8,
+      "manaModifierPerMinute": -0.2667,
+      "defaultApps": ["com.zhiliaoapp.musically", "com.instagram.android", "com.twitter.android", "com.reddit.frontpage"]
+    }
+  },
+  "defaultCategory": "communication"
+}

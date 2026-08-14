@@ -109,7 +109,7 @@ This scope split is a direct application of the Extra Features Backlog's own "ke
 
 ### 2.1 Product Perspective
 
-ARISE is a new, greenfield product. Its **frontend already exists** (Flutter, Riverpod) and this SRS governs the construction of the **backend, local database layer, sync engine, and API contract** the frontend will consume, plus any frontend-facing contract clarifications the AI coding agent needs to wire the two together (request/response DTOs, event payloads, auth flow). The backend is a self-hosted service (Node.js/Express/TypeScript/PostgreSQL) rather than a wrapper around a third-party BaaS, because the product's core mechanic — a backend-authoritative RPG progression system resistant to client tampering — requires custom validation logic that a generic BaaS does not provide out of the box.
+ARISE is a new, greenfield product. Its **frontend already exists** (Flutter, Riverpod) and this SRS governs the construction of the **backend, local database layer, sync engine, and API contract** the frontend will consume, plus any frontend-facing contract clarifications the AI coding agent needs to wire the two together (request/response DTOs, event payloads, auth flow). The backend is a self-hosted service (Node.js/NestJS/TypeScript/PostgreSQL) rather than a wrapper around a third-party BaaS, because the product's core mechanic — a backend-authoritative RPG progression system resistant to client tampering — requires custom validation logic that a generic BaaS does not provide out of the box.
 
 ### 2.2 Product Vision & Philosophy
 
@@ -144,7 +144,7 @@ flowchart LR
 ### 2.5 Operating Environment
 
 - **Client:** Flutter (iOS, Android; desktop/web not required for MVP), Riverpod state management, local database (SQLite via Drift, or Isar).
-- **Backend:** Node.js + Express.js + TypeScript, deployed as a modular-monolith HTTP service.
+- **Backend:** Node.js + NestJS (Express adapter under the hood) + TypeScript, deployed as a modular-monolith HTTP service.
 - **Database:** PostgreSQL (system of record); Redis (cache, queues, rate limiting).
 - **Object storage:** S3-compatible storage for attachments (note images, PDFs, avatars).
 - **AI:** Provider-abstracted (OpenAI / Gemini / Claude interchangeable behind one interface).
@@ -206,7 +206,7 @@ flowchart LR
         FINF[Infrastructure incl. Local DB + Sync Engine]
     end
     subgraph Backend [Node.js Modular Monolith]
-        GW[API Gateway / Express Router]
+        GW[API Gateway / NestJS HTTP Layer]
         MODULES[Feature Modules]
         ENGINES[Centralized Game Engines]
         AIABS[AI Provider Abstraction]
@@ -255,13 +255,19 @@ Dependency direction is inward only: `presentation -> application -> domain`; `i
 
 ```
 backend/src/modules/<module>/
-  controller/    -- HTTP request handling only
-  service/       -- business logic / orchestration
+  <module>.module.ts  -- NestJS module: wires controller(s) + providers, declares this module's
+                          public exports; this is the DI/routing boundary that replaces a
+                          hand-built Express router for this module
+  controller/    -- HTTP request handling only (NestJS `@Controller()` classes; route paths
+                    and verbs are decorators — `@Get()`, `@Post(':id/complete')`, etc. —
+                    never a manually constructed `express.Router()`)
+  service/       -- business logic / orchestration (injectable `@Injectable()` providers)
   repository/    -- PostgreSQL access via query builder/ORM
-  validation/    -- request schema validation (e.g., zod)
+  validation/    -- request schema validation (Zod schemas, applied via a `ZodValidationPipe`
+                    / `nestjs-zod` at the controller or global level)
   dto/           -- request/response shape definitions
-  routes/        -- Express router for this module
-  events/        -- domain events this module emits/consumes
+  events/        -- domain events this module emits/consumes (via Nest's `EventEmitter2`
+                    or an injected event-bus provider)
   types/         -- module-local TypeScript types
   tests/         -- unit + integration tests
   README.md      -- purpose, public API, dependencies, DB tables, events, extension points
@@ -389,8 +395,8 @@ Responsibilities: detect connectivity changes; queue offline events; retry with 
 ```mermaid
 flowchart TB
     Mobile[Flutter Mobile App] -->|HTTPS| LB[Load Balancer / API Gateway]
-    LB --> API1[Node/Express Instance 1]
-    LB --> API2[Node/Express Instance 2]
+    LB --> API1[Node/NestJS Instance 1]
+    LB --> API2[Node/NestJS Instance 2]
     API1 --> PG[(PostgreSQL Primary)]
     API2 --> PG
     PG --> PGR[(PostgreSQL Read Replica)]
