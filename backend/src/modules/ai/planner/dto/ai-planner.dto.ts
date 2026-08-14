@@ -1,4 +1,5 @@
 import { AIPlanStructuredOutput } from '../validation/plan.schema';
+import { QuestResponse } from '../../../quests/dto/quest.dto';
 
 export interface AiGeneratedPlanResponse {
   id: string;
@@ -14,18 +15,5 @@ export interface AiGeneratedPlanResponse {
 
 export interface ApprovePlanResponse {
   plan: AiGeneratedPlanResponse;
-  createdQuests: Array<{
-    id: string;
-    userId: string;
-    parentQuestId: string | null;
-    bossId: string | null;
-    title: string;
-    description: string | null;
-    questType: string;
-    priority: string;
-    difficulty: string;
-    estimatedMinutes: number;
-    deadline: string | null;
-    status: string;
-  }>;
+  createdQuests: QuestResponse[];
 }

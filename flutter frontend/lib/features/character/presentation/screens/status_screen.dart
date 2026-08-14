@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_popup_window.dart';
@@ -13,6 +14,8 @@ import '../../../../core/design_system/components/rank_badge.dart';
 import '../../../../core/design_system/components/system_progress_bar.dart';
 import '../../../../core/providers/player_provider.dart';
 import '../../../../core/utils/arise_layout_insets.dart';
+import '../../infrastructure/achievements_remote_data_source.dart';
+import '../../domain/achievement_models.dart';
 
 class StatusScreen extends ConsumerStatefulWidget {
   final ValueChanged<String>? onStatUp;
@@ -27,23 +30,22 @@ class StatusScreen extends ConsumerStatefulWidget {
 }
 
 class _StatusScreenState extends ConsumerState<StatusScreen> {
-  String _tab = 'stats';
+  String _tab = 'stats'; // 'stats' | 'ledger' | 'achievements'
   bool _showTitles = false;
-  String _activeTitle = 'wolf';
   String? _pendingStat;
 
   static const statIcons = {
     'STR': '⚡', 'AGI': '◈', 'VIT': '♦', 'INT': '◎', 'PER': '◉',
   };
 
-  static const titles = [
+  static const availableTitles = [
     {'id': 'wolf', 'name': 'WOLF SLAYER', 'desc': 'Defeated 10+ dungeon bosses', 'active': true},
     {'id': 'iron', 'name': 'IRON WILL', 'desc': 'Maintained a 30-day streak', 'active': true},
     {'id': 'shadow', 'name': 'SHADOW MONARCH', 'desc': 'Complete 500 quests [LOCKED]', 'active': false},
     {'id': 'arise', 'name': 'THE AWAKENED', 'desc': 'Default title upon awakening', 'active': true},
   ];
 
-  static const achievements = [
+  static const fallbackAchievements = [
     {'id': 'a1', 'name': 'FIRST BLOOD', 'rarity': 'common', 'icon': '⚔', 'desc': 'Complete your first quest', 'unlocked': true},
     {'id': 'a2', 'name': 'IRON STREAK', 'rarity': 'uncommon', 'icon': '🔥', 'desc': '14-day streak achieved', 'unlocked': true},
     {'id': 'a3', 'name': 'DUNGEON CRAWLER', 'rarity': 'rare', 'icon': '🏛', 'desc': 'Enter 50 Focus Gates', 'unlocked': true},
@@ -57,6 +59,8 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
   @override
   Widget build(BuildContext context) {
     final player = ref.watch(playerProvider);
+    final historyAsync = ref.watch(characterHistoryProvider);
+    final aggregatesAsync = ref.watch(xpAggregatesProvider);
 
     final stats = {
       'STR': player.str,
@@ -66,7 +70,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       'PER': player.per,
     };
 
-    final displayTitle = titles.firstWhere((t) => t['id'] == _activeTitle, orElse: () => titles[0])['name'] as String;
+    final displayTitle = player.title.isNotEmpty ? player.title : 'THE AWAKENED';
 
     return Stack(
       children: [
@@ -75,8 +79,15 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Text('[ HUNTER REGISTRY ]', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled)),
+              // Header with Sync / Projection Status Indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('[ HUNTER REGISTRY ]', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled)),
+                  _SyncBadge(syncStatus: player.syncStatus, isPending: player.isProgressionPending),
+                ],
+              ),
+              const SizedBox(height: 2),
               Text('SYSTEM STATUS', style: AppTypography.orbitron(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               const SizedBox(height: 12),
 
@@ -97,6 +108,21 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
                           ),
                           alignment: Alignment.center,
                           child: Text('STATUS', style: AppTypography.orbitron(fontSize: 10, color: _tab == 'stats' ? AppColors.manaCyan : AppColors.textDisabled)),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: PressableCard(
+                        onTap: () => setState(() => _tab = 'ledger'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _tab == 'ledger' ? AppColors.manaCyan.withValues(alpha: 0.1) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(bottom: BorderSide(color: _tab == 'ledger' ? AppColors.manaCyan : Colors.transparent, width: 2)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text('XP LEDGER', style: AppTypography.orbitron(fontSize: 10, color: _tab == 'ledger' ? AppColors.manaCyan : AppColors.textDisabled)),
                         ),
                       ),
                     ),
@@ -153,7 +179,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
                                   Text('TITLE  ', style: AppTypography.orbitron(fontSize: 11, color: AppColors.textSecondary, letterSpacing: 0.08)),
                                   GestureDetector(
                                     onTap: () => setState(() => _showTitles = true),
-                                    child: Text('$displayTitle ▼', style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.expFrom)),
+                                    child: Text('$displayTitle ▼', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.expFrom)),
                                   ),
                                 ],
                               ),
@@ -273,95 +299,263 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      SystemProgressBar(value: player.exp.toDouble(), max: player.maxExp.toDouble(), variant: ProgressBarVariant.exp, height: 10),
+                      SystemProgressBar(
+                        value: player.exp.toDouble(),
+                        max: player.maxExp > 0 ? player.maxExp.toDouble() : 1000.0,
+                        variant: ProgressBarVariant.exp,
+                        height: 10,
+                      ),
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: Text('TO LEVEL ${player.level + 1}: ${player.maxExp - player.exp} EXP', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+                        child: Text(
+                          player.maxExp > player.exp
+                              ? 'TO LEVEL ${player.level + 1}: ${player.maxExp - player.exp} EXP'
+                              : 'MAX LEVEL EXP THRESHOLD REACHED',
+                          style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Gold Reserves Card
-                GlassCard(
-                  padding: const EdgeInsets.all(12),
-                  borderColor: const Color(0x40C98A1A),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('GOLD RESERVES', style: AppTypography.orbitron(fontSize: 10, color: const Color(0xFFC98A1A), letterSpacing: 0.12)),
-                      Text('⬡ ${player.gold}', style: AppTypography.monoStat(fontSize: 18, color: AppColors.expFrom)),
-                    ],
+                // Currency Reserves Cards
+                Row(
+                  children: [
+                    Expanded(
+                      child: GlassCard(
+                        padding: const EdgeInsets.all(12),
+                        borderColor: const Color(0x40C98A1A),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('GOLD', style: AppTypography.orbitron(fontSize: 10, color: const Color(0xFFC98A1A), letterSpacing: 0.12)),
+                            Text('⬡ ${player.gold}', style: AppTypography.monoStat(fontSize: 16, color: AppColors.expFrom)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GlassCard(
+                        padding: const EdgeInsets.all(12),
+                        borderColor: AppColors.manaCyan.withValues(alpha: 0.3),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('GEMS', style: AppTypography.orbitron(fontSize: 10, color: AppColors.manaCyan, letterSpacing: 0.12)),
+                            Text('◈ ${player.gems}', style: AppTypography.monoStat(fontSize: 16, color: AppColors.manaCyan)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              if (_tab == 'ledger') ...[
+                // Aggregates Summary Panel
+                aggregatesAsync.when(
+                  data: (aggregates) => GlassCard(
+                    padding: const EdgeInsets.all(14),
+                    borderColor: AppColors.expFrom.withValues(alpha: 0.3),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('[ XP REWARD CASCADE AGGREGATES ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _AggregateColumn(label: 'TODAY', value: '+${aggregates.today}'),
+                            _AggregateColumn(label: 'THIS WEEK', value: '+${aggregates.thisWeek}'),
+                            _AggregateColumn(label: 'THIS MONTH', value: '+${aggregates.thisMonth}'),
+                            _AggregateColumn(label: 'LIFETIME', value: '${aggregates.lifetime}'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  loading: () => const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.manaCyan))),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 12),
+
+                // Transaction Ledger
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('[ TRANSACTION LEDGER ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+                    Text('AUTHORITATIVE SERVER LOG', style: AppTypography.monoStat(fontSize: 9, color: AppColors.manaCyan)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                historyAsync.when(
+                  data: (history) {
+                    if (history.xpTransactions.isEmpty && history.manaTransactions.isEmpty) {
+                      return GlassCard(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              const Text('📜', style: TextStyle(fontSize: 24)),
+                              const SizedBox(height: 8),
+                              Text('NO TRANSACTIONS RECORDED YET', style: AppTypography.orbitron(fontSize: 11, color: AppColors.textDisabled)),
+                              const SizedBox(height: 4),
+                              Text('Complete quests or gates to earn authoritative XP.', style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: history.xpTransactions.map((tx) {
+                        final isPositive = tx.amount >= 0;
+                        final color = isPositive ? AppColors.expFrom : AppColors.dangerRed;
+                        final sign = isPositive ? '+' : '';
+                        final dateStr = DateFormat('HH:mm · MMM d').format(tx.createdAt);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: GlassCard(
+                            padding: const EdgeInsets.all(12),
+                            borderColor: color.withValues(alpha: 0.25),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      tx.reason ?? tx.sourceType.toUpperCase(),
+                                      style: AppTypography.orbitron(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'SOURCE: ${tx.sourceType.toUpperCase()} · $dateStr',
+                                      style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '$sign${tx.amount} XP',
+                                  style: AppTypography.monoStat(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                  loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: AppColors.manaCyan))),
+                  error: (err, _) => GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(child: Text('Failed to load ledger: $err', style: AppTypography.rajdhani(fontSize: 12, color: AppColors.dangerRed))),
                   ),
                 ),
               ],
 
               if (_tab == 'achievements') ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('[ ACHIEVEMENT REGISTRY ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
-                    Text('${achievements.where((a) => a['unlocked'] as bool).length} / ${achievements.length} UNLOCKED', style: AppTypography.monoStat(fontSize: 10, color: AppColors.expFrom)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 1.0,
-                  children: achievements.map((ach) {
-                    final unlocked = ach['unlocked'] as bool;
-                    final rarity = ach['rarity'] as String;
-                    Color rc = AppColors.rankE;
-                    if (rarity == 'uncommon') rc = AppColors.rankD;
-                    if (rarity == 'rare') rc = AppColors.rankC;
-                    if (rarity == 'epic') rc = AppColors.rankB;
-                    if (rarity == 'legendary') rc = AppColors.expFrom;
+                ref.watch(achievementsProvider).when(
+                  data: (dynamicAchievements) {
+                    final displayList = dynamicAchievements.isNotEmpty ? dynamicAchievements : _StatusScreenState.fallbackAchievements.map((a) => SystemAchievement(
+                      id: a['id'] as String,
+                      code: a['id'] as String,
+                      title: a['name'] as String,
+                      description: a['desc'] as String,
+                      category: 'general',
+                      xpReward: 100,
+                      unlocked: a['unlocked'] as bool,
+                    )).toList();
 
-                    return Opacity(
-                      opacity: unlocked ? 1.0 : 0.55,
-                      child: GlassCard(
-                        borderColor: unlocked ? rc.withValues(alpha: 0.45) : AppColors.manaCyan.withValues(alpha: 0.08),
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                    final unlockedCount = displayList.where((a) => a.unlocked).length;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: unlocked ? rc.withValues(alpha: 0.15) : AppColors.manaCyan.withValues(alpha: 0.04),
-                                border: Border.all(color: unlocked ? rc.withValues(alpha: 0.45) : AppColors.manaCyan.withValues(alpha: 0.1), width: 1.5),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(unlocked ? (ach['icon'] as String) : '🔒', style: const TextStyle(fontSize: 22)),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(ach['name'] as String, textAlign: TextAlign.center, style: AppTypography.orbitron(fontSize: 9, fontWeight: FontWeight.bold, color: unlocked ? rc : AppColors.textDisabled)),
-                            const SizedBox(height: 2),
-                            Text(ach['desc'] as String, textAlign: TextAlign.center, style: AppTypography.rajdhani(fontSize: 10, color: AppColors.textSecondary)),
-                            const SizedBox(height: 4),
-                            if (unlocked)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: rc.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(color: rc.withValues(alpha: 0.3)),
-                                ),
-                                child: Text(rarity.toUpperCase(), style: AppTypography.monoStat(fontSize: 8, color: rc)),
-                              ),
+                            Text('[ ACHIEVEMENT REGISTRY (§6.19) ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+                            Text('$unlockedCount / ${displayList.length} UNLOCKED', style: AppTypography.monoStat(fontSize: 10, color: AppColors.expFrom)),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.0,
+                          children: displayList.map((ach) {
+                            final unlocked = ach.unlocked;
+                            final rarity = ach.rarity;
+                            Color rc = AppColors.rankE;
+                            if (rarity == 'uncommon') rc = AppColors.rankD;
+                            if (rarity == 'rare') rc = AppColors.rankC;
+                            if (rarity == 'epic') rc = AppColors.rankB;
+                            if (rarity == 'legendary') rc = AppColors.expFrom;
+
+                            return Opacity(
+                              opacity: unlocked ? 1.0 : 0.55,
+                              child: GlassCard(
+                                borderColor: unlocked ? rc.withValues(alpha: 0.45) : AppColors.manaCyan.withValues(alpha: 0.08),
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: unlocked ? rc.withValues(alpha: 0.15) : AppColors.manaCyan.withValues(alpha: 0.04),
+                                        border: Border.all(color: unlocked ? rc.withValues(alpha: 0.45) : AppColors.manaCyan.withValues(alpha: 0.1), width: 1.5),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(unlocked ? ach.icon : '🔒', style: const TextStyle(fontSize: 22)),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(ach.title, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.orbitron(fontSize: 9, fontWeight: FontWeight.bold, color: unlocked ? rc : AppColors.textDisabled)),
+                                    const SizedBox(height: 2),
+                                    Text(ach.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.rajdhani(fontSize: 10, color: AppColors.textSecondary)),
+                                    const SizedBox(height: 4),
+                                    if (unlocked)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: rc.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(999),
+                                          border: Border.all(color: rc.withValues(alpha: 0.3)),
+                                        ),
+                                        child: Text(rarity.toUpperCase(), style: AppTypography.monoStat(fontSize: 8, color: rc)),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     );
-                  }).toList(),
+                  },
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(color: AppColors.manaCyan),
+                    ),
+                  ),
+                  error: (err, _) => GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: Text('Failed to load achievements: $err', style: AppTypography.rajdhani(fontSize: 12, color: AppColors.dangerRed)),
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -381,14 +575,19 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
                     child: Text('SELECT TITLE', style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary, letterSpacing: 0.08)),
                   ),
                   const SizedBox(height: 12),
-                  ...titles.map((t) {
+                  ...availableTitles.map((t) {
                     final id = t['id'] as String;
                     final active = t['active'] as bool;
-                    final isSelected = _activeTitle == id;
+                    final isSelected = player.activeTitleId == id || (player.activeTitleId == null && id == 'arise');
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
                       child: PressableCard(
-                        onTap: active ? () => setState(() { _activeTitle = id; _showTitles = false; }) : null,
+                        onTap: active
+                            ? () {
+                                setState(() => _showTitles = false);
+                                ref.read(playerProvider.notifier).equipTitle(id);
+                              }
+                            : null,
                         pressedScale: 0.98,
                         child: GlassCard(
                           borderColor: isSelected ? AppColors.expFrom : AppColors.glassBorder,
@@ -513,6 +712,69 @@ class _FieldRow extends StatelessWidget {
           Text(value, style: AppTypography.orbitron(fontSize: 12, color: AppColors.textPrimary)),
         ],
       ),
+    );
+  }
+}
+
+class _SyncBadge extends StatelessWidget {
+  final String syncStatus;
+  final bool isPending;
+
+  const _SyncBadge({required this.syncStatus, required this.isPending});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color = AppColors.manaCyan;
+    String label = 'VERIFIED';
+
+    if (isPending || syncStatus == 'pending') {
+      color = AppColors.rankA;
+      label = 'SYNC PENDING';
+    } else if (syncStatus == 'local' || syncStatus == 'failed') {
+      color = AppColors.textDisabled;
+      label = 'LOCAL PROJECTION';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: AppTypography.monoStat(fontSize: 8, color: color, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AggregateColumn extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _AggregateColumn({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: AppTypography.monoStat(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.expFrom)),
+        const SizedBox(height: 2),
+        Text(label, style: AppTypography.orbitron(fontSize: 8, color: AppColors.textSecondary)),
+      ],
     );
   }
 }

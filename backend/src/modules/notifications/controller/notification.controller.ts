@@ -14,11 +14,9 @@ import { CurrentUser } from '../../../core/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../../core/pipes/zod-validation.pipe';
 import { NotificationService } from '../service/notification.service';
 import {
-  createNotificationSchema,
   notificationFilterSchema,
 } from '../validation/notification.schema';
 import {
-  CreateNotificationDto,
   NotificationFilterDto,
 } from '../dto/notification.dto';
 

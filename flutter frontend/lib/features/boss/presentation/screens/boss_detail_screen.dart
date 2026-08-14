@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_back_button.dart';
@@ -9,9 +10,11 @@ import '../../../../core/design_system/components/pressable_card.dart';
 import '../../../../core/design_system/components/rank_badge.dart';
 import '../../../../core/design_system/components/reward_chip.dart';
 import '../../../../core/design_system/components/section_header.dart';
+import '../../../../core/providers/quest_provider.dart';
 import '../../../../core/utils/arise_layout_insets.dart';
+import '../providers/boss_provider.dart';
 
-class BossDetailScreen extends StatefulWidget {
+class BossDetailScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onFocusMode;
 
@@ -22,23 +25,84 @@ class BossDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<BossDetailScreen> createState() => _BossDetailScreenState();
+  ConsumerState<BossDetailScreen> createState() => _BossDetailScreenState();
 }
 
-class _BossDetailScreenState extends State<BossDetailScreen> {
-  final bool _isDefeated = false;
-
-  static const attackLog = [
-    {'action': 'Completed API integration', 'dmg': -850, 'time': '2h ago', 'rank': 'A'},
-    {'action': 'Wrote test suite (32 specs)', 'dmg': -400, 'time': '5h ago', 'rank': 'B'},
-    {'action': 'Design handoff finalized', 'dmg': -600, 'time': '1d ago', 'rank': 'A'},
-    {'action': 'Auth flow implemented', 'dmg': -700, 'time': '2d ago', 'rank': 'A'},
-    {'action': 'DB schema locked', 'dmg': -950, 'time': '3d ago', 'rank': 'S'},
-  ];
-
+class _BossDetailScreenState extends ConsumerState<BossDetailScreen> {
   @override
   Widget build(BuildContext context) {
-    if (_isDefeated) {
+    final bossState = ref.watch(bossNotifierProvider);
+    final questState = ref.watch(questNotifierProvider);
+
+    if (bossState.isLoading && bossState.activeBoss == null) {
+      return Scaffold(
+        backgroundColor: AppColors.voidEdge,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppColors.rankA),
+              const SizedBox(height: 16),
+              Text(
+                'INITIALIZING BOSS ENCOUNTER...',
+                style: AppTypography.monoStat(
+                  fontSize: 12,
+                  color: AppColors.rankA,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final boss = bossState.activeBoss;
+
+    if (boss == null) {
+      return Scaffold(
+        backgroundColor: AppColors.voidEdge,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AriseBackButton(onPressed: widget.onBack),
+                const Spacer(),
+                Center(
+                  child: Column(
+                    children: [
+                      const Text('⚔', style: TextStyle(fontSize: 48, color: AppColors.textDisabled)),
+                      const SizedBox(height: 12),
+                      Text(
+                        'NO ACTIVE BOSS ENCOUNTER',
+                        style: AppTypography.orbitron(fontSize: 16, color: AppColors.textDisabled),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create a project boss in your quests to unlock boss battles.',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.rajdhani(fontSize: 14, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Check defeat condition
+    final isDefeated = boss.isDefeated || bossState.isDefeatedModalVisible;
+
+    if (isDefeated) {
+      final rewards = bossState.defeatRewards;
+      final rewardExp = (rewards?['xp'] as num?)?.toInt() ?? 2000;
+      final rewardGold = (rewards?['coins'] as num?)?.toInt() ?? 500;
+
       return Scaffold(
         backgroundColor: AppColors.voidEdge,
         body: Center(
@@ -60,11 +124,21 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                   child: const Text('💀', style: TextStyle(fontSize: 44)),
                 ),
                 const SizedBox(height: 16),
-                Text('[ BOSS DEFEATED ]', style: AppTypography.monoStat(fontSize: 10, color: AppColors.expFrom, letterSpacing: 0.2)),
+                Text(
+                  '[ BOSS DEFEATED ]',
+                  style: AppTypography.monoStat(fontSize: 10, color: AppColors.expFrom, letterSpacing: 0.2),
+                ),
                 const SizedBox(height: 4),
-                Text('PROJECT DEFEATED', style: AppTypography.orbitron(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.expFrom)),
+                Text(
+                  'PROJECT CONQUERED',
+                  style: AppTypography.orbitron(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.expFrom),
+                ),
                 const SizedBox(height: 8),
-                Text('SHIP THE APP has been conquered. The System acknowledges your victory.', textAlign: TextAlign.center, style: AppTypography.rajdhani(fontSize: 14, color: AppColors.textSecondary)),
+                Text(
+                  '${boss.title} has been eradicated. The System acknowledges your victory.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.rajdhani(fontSize: 14, color: AppColors.textSecondary),
+                ),
                 const SizedBox(height: 20),
                 OrnatePanel(
                   cornerSize: 24,
@@ -74,9 +148,13 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                       children: [
                         Text('[ REWARDS DISTRIBUTED ]', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textSecondary)),
                         const SizedBox(height: 12),
-                        const RewardChip(exp: 2000, gold: 500),
+                        RewardChip(exp: rewardExp, gold: rewardGold),
                         const DiamondDivider(),
-                        ...['TITLE UNLOCKED: DELIVERER', 'NEW BOSS AVAILABLE: EXPAND USERBASE', 'STAT BONUS: +3 INT, +2 PER'].map((r) {
+                        ...[
+                          'AUTHORITATIVE XP & COINS DELIVERED',
+                          'STATUS UPDATED TO DEFEATED',
+                          'ACHIEVEMENTS EVALUATED & UNLOCKED',
+                        ].map((r) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 3.0),
                             child: Text('> $r', style: AppTypography.monoStat(fontSize: 11, color: AppColors.terminalGreen)),
@@ -88,7 +166,10 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                 ),
                 const SizedBox(height: 24),
                 PressableCard(
-                  onTap: widget.onBack,
+                  onTap: () {
+                    ref.read(bossNotifierProvider.notifier).hideDefeatModal();
+                    widget.onBack();
+                  },
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -108,13 +189,26 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
       );
     }
 
+    // Dynamic Attack Log from completed quests linked to this boss
+    final linkedCompletedQuests = questState.quests
+        .where((q) => q.bossId == boss.id && q.done)
+        .toList();
+
+    final hpFraction = boss.hpPercent;
+    final hpRemainingPct = (hpFraction * 100).round();
+
     return Scaffold(
       backgroundColor: AppColors.voidEdge,
       body: SafeArea(
         child: Stack(
           children: [
             SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, AriseLayoutInsets.bottomOverlayInset(context, extra: 72.0)),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                AriseLayoutInsets.bottomOverlayInset(context, extra: 72.0),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -122,8 +216,24 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       AriseBackButton(onPressed: widget.onBack),
-                      Text('[ BOSS ENCOUNTER ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.rankA)),
-                      const RankBadge(rank: 'A', size: RankBadgeSize.sm),
+                      Row(
+                        children: [
+                          if (boss.syncStatus == 'pending') ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.warningAmber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: AppColors.warningAmber, width: 0.5),
+                              ),
+                              child: Text('PENDING SYNC', style: AppTypography.monoStat(fontSize: 8, color: AppColors.warningAmber)),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Text('[ BOSS ENCOUNTER ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.rankA)),
+                        ],
+                      ),
+                      RankBadge(rank: boss.rank, size: RankBadgeSize.sm),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -146,8 +256,23 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                           child: const Text('⚔', style: TextStyle(fontSize: 36, color: AppColors.rankA)),
                         ),
                         const SizedBox(height: 12),
-                        Text('SHIP THE APP', style: AppTypography.orbitron(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-                        Text('A-RANK BOSS · PROJECT', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+                        Text(
+                          boss.title,
+                          style: AppTypography.orbitron(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+                          textAlign: TextAlign.center,
+                        ),
+                        Text(
+                          '${boss.rank}-RANK BOSS · ${boss.difficulty.toUpperCase()}',
+                          style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary),
+                        ),
+                        if (boss.description != null && boss.description!.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            boss.description!,
+                            style: AppTypography.rajdhani(fontSize: 12, color: AppColors.textSecondary),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                         const SizedBox(height: 16),
 
                         // HP Bar
@@ -155,7 +280,10 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('HP', style: AppTypography.orbitron(fontSize: 16, color: AppColors.hpFrom)),
-                            Text('6,500 / 10,000', style: AppTypography.monoStat(fontSize: 14, color: AppColors.textPrimary)),
+                            Text(
+                              '${boss.hpCurrent} / ${boss.hpMax}',
+                              style: AppTypography.monoStat(fontSize: 14, color: AppColors.textPrimary),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -169,7 +297,7 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                                 border: Border.all(color: AppColors.hpFrom.withValues(alpha: 0.35)),
                               ),
                               child: FractionallySizedBox(
-                                widthFactor: 0.65,
+                                widthFactor: hpFraction,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(colors: [AppColors.hpFrom, AppColors.rankA]),
@@ -178,7 +306,7 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                                 ),
                               ),
                             ),
-                            // Segment ticks [20, 40, 60, 80]
+                            // Segment ticks
                             Positioned.fill(
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -191,18 +319,24 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('0x0000', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textDisabled)),
-                            Text('65% REMAINING', style: AppTypography.monoStat(fontSize: 8, color: AppColors.hpFrom)),
-                            Text('MAX', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textDisabled)),
+                            Text('0 HP', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textDisabled)),
+                            Text('$hpRemainingPct% REMAINING', style: AppTypography.monoStat(fontSize: 8, color: AppColors.hpFrom)),
+                            Text('${boss.hpMax} MAX', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textDisabled)),
                           ],
                         ),
                         const DiamondDivider(),
 
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            RewardChip(exp: 2000, gold: 500),
-                            Text('⏱ 14D 06H', style: TextStyle(color: AppColors.dangerRed, fontSize: 10)),
+                            const RewardChip(exp: 2000, gold: 500),
+                            if (boss.deadline != null)
+                              Text(
+                                '⏱ DEADLINE: ${boss.deadline!.toLocal().toString().substring(0, 10)}',
+                                style: const TextStyle(color: AppColors.dangerRed, fontSize: 10),
+                              )
+                            else
+                              Text('⏱ NO EXPIRATION', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
                           ],
                         ),
                       ],
@@ -211,31 +345,46 @@ class _BossDetailScreenState extends State<BossDetailScreen> {
                   const SizedBox(height: 16),
 
                   // Attack Log
-                  const SectionHeader(title: 'ATTACK LOG'),
-                  ...attackLog.map((log) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: GlassCard(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            RankBadge(rank: log['rank'] as String, size: RankBadgeSize.sm),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(log['action'] as String, style: AppTypography.rajdhani(fontSize: 12, color: AppColors.textPrimary)),
-                                  Text(log['time'] as String, style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
-                                ],
-                              ),
-                            ),
-                            Text('${log['dmg']} HP', style: AppTypography.monoStat(fontSize: 12, color: AppColors.hpFrom, fontWeight: FontWeight.bold)),
-                          ],
+                  const SectionHeader(title: 'ATTACK LOG (COMPLETED QUESTS)'),
+                  if (linkedCompletedQuests.isEmpty)
+                    GlassCard(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(
+                        child: Text(
+                          'No strikes landed yet. Complete quests linked to this boss to deal damage.',
+                          style: AppTypography.rajdhani(fontSize: 12, color: AppColors.textDisabled),
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                    );
-                  }),
+                    )
+                  else
+                    ...linkedCompletedQuests.map((quest) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: GlassCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              RankBadge(rank: quest.rank, size: RankBadgeSize.sm),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(quest.title, style: AppTypography.rajdhani(fontSize: 12, color: AppColors.textPrimary)),
+                                    Text('Completed • ${quest.exp} XP awarded', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '-${quest.exp * 2} HP',
+                                style: AppTypography.monoStat(fontSize: 12, color: AppColors.hpFrom, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),

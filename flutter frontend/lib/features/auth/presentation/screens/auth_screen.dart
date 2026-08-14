@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_pressable.dart';
@@ -12,19 +13,20 @@ import '../../../../core/design_system/components/pressable_card.dart';
 import '../../../../core/design_system/components/scanline_sweep.dart';
 import '../../../../core/design_system/components/terminal_readout.dart';
 import '../../../../core/design_system/components/uplink_chip.dart';
+import '../../application/auth_notifier.dart';
 
 enum AuthSubScreen { login, register, recovery, verifying }
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   final VoidCallback onComplete;
 
   const AuthScreen({super.key, required this.onComplete});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   AuthSubScreen _screen = AuthSubScreen.login;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -38,45 +40,111 @@ class _AuthScreenState extends State<AuthScreen> {
     TerminalLineItem(text: 'Uplink established', status: 'SYNC'),
   ];
 
-  void _handleLogin() {
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter hunter email and access code')),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _screen = AuthSubScreen.verifying;
     });
-    Timer(const Duration(milliseconds: 2200), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        widget.onComplete();
-      }
-    });
-  }
 
-  void _handleRegister() {
-    setState(() {
-      _isLoading = true;
-      _screen = AuthSubScreen.verifying;
-    });
-    Timer(const Duration(milliseconds: 2200), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        widget.onComplete();
-      }
-    });
-  }
+    final success = await ref.read(authNotifierProvider.notifier).login(
+          email: email,
+          password: password,
+        );
 
-  void _handleRecovery() {
-    setState(() => _screen = AuthSubScreen.verifying);
-    Timer(const Duration(milliseconds: 2500), () {
-      if (mounted) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (success) {
+        widget.onComplete();
+      } else {
         setState(() => _screen = AuthSubScreen.login);
       }
+    }
+  }
+
+  Future<void> _handleRegister() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 8 characters')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _screen = AuthSubScreen.verifying;
     });
+
+    final success = await ref.read(authNotifierProvider.notifier).signup(
+          email: email,
+          password: password,
+        );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (success) {
+        widget.onComplete();
+      } else {
+        setState(() => _screen = AuthSubScreen.register);
+      }
+    }
+  }
+
+  Future<void> _handleRecovery() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter registered hunter frequency')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _screen = AuthSubScreen.verifying;
+    });
+
+    final success = await ref.read(authNotifierProvider.notifier).requestPasswordReset(email);
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (success) {
+        await Future.delayed(const Duration(milliseconds: 1600));
+        if (mounted) setState(() => _screen = AuthSubScreen.login);
+      } else {
+        setState(() => _screen = AuthSubScreen.recovery);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+
     if (_screen == AuthSubScreen.verifying) {
-      return _VerifyingScreen(isRecovery: !_isLoading);
+      return _VerifyingScreen(
+        isRecovery: !_isLoading && authState.successMessage != null,
+      );
     }
 
     return Scaffold(
@@ -134,15 +202,41 @@ class _AuthScreenState extends State<AuthScreen> {
                     padding: EdgeInsets.all(12),
                     child: TerminalReadout(lines: bootLines),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // Dynamic Error/Status Banner
+                  if (authState.errorMessage != null) ...[
+                    _SystemAlertBanner(
+                      message: authState.errorMessage!,
+                      isError: true,
+                      details: authState.validationErrors,
+                      onDismiss: () => ref.read(authNotifierProvider.notifier).clearError(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (authState.successMessage != null) ...[
+                    _SystemAlertBanner(
+                      message: authState.successMessage!,
+                      isError: false,
+                      onDismiss: () => ref.read(authNotifierProvider.notifier).clearError(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   if (_screen == AuthSubScreen.login)
                     _LoginForm(
                       emailController: _emailController,
                       passwordController: _passwordController,
                       onLogin: _handleLogin,
-                      onGoRegister: () => setState(() => _screen = AuthSubScreen.register),
-                      onGoRecovery: () => setState(() => _screen = AuthSubScreen.recovery),
+                      onGoRegister: () {
+                        ref.read(authNotifierProvider.notifier).clearError();
+                        setState(() => _screen = AuthSubScreen.register);
+                      },
+                      onGoRecovery: () {
+                        ref.read(authNotifierProvider.notifier).clearError();
+                        setState(() => _screen = AuthSubScreen.recovery);
+                      },
                     ),
 
                   if (_screen == AuthSubScreen.register)
@@ -151,19 +245,93 @@ class _AuthScreenState extends State<AuthScreen> {
                       passwordController: _passwordController,
                       nameController: _nameController,
                       onRegister: _handleRegister,
-                      onGoLogin: () => setState(() => _screen = AuthSubScreen.login),
+                      onGoLogin: () {
+                        ref.read(authNotifierProvider.notifier).clearError();
+                        setState(() => _screen = AuthSubScreen.login);
+                      },
                     ),
 
                   if (_screen == AuthSubScreen.recovery)
                     _RecoveryForm(
                       emailController: _emailController,
                       onSend: _handleRecovery,
-                      onGoLogin: () => setState(() => _screen = AuthSubScreen.login),
+                      onGoLogin: () {
+                        ref.read(authNotifierProvider.notifier).clearError();
+                        setState(() => _screen = AuthSubScreen.login);
+                      },
                     ),
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemAlertBanner extends StatelessWidget {
+  final String message;
+  final bool isError;
+  final List<String>? details;
+  final VoidCallback onDismiss;
+
+  const _SystemAlertBanner({
+    required this.message,
+    required this.isError,
+    this.details,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? AppColors.dangerRed : AppColors.terminalGreen;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                isError ? '⚠ SYSTEM WARNING' : '◈ SYSTEM TRANSMISSION',
+                style: AppTypography.monoStat(fontSize: 10, color: color),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: onDismiss,
+                child: Icon(Icons.close, size: 14, color: color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: AppTypography.rajdhani(
+              fontSize: 13,
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (details != null && details!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...details!.map(
+              (d) => Padding(
+                padding: const EdgeInsets.only(bottom: 2.0),
+                child: Text(
+                  '> $d',
+                  style: AppTypography.monoStat(fontSize: 10, color: color),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -220,6 +388,7 @@ class _LoginForm extends StatelessWidget {
             label: '> HUNTER ID (EMAIL)',
             controller: emailController,
             hintText: 'hunter@arise.sys',
+            keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 12),
           _TerminalInput(
@@ -250,9 +419,25 @@ class _LoginForm extends StatelessWidget {
 
           const DiamondDivider(),
 
-          _SSOButton(icon: 'G', label: 'CONTINUE VIA GOOGLE NETWORK', onTap: onLogin),
+          _SSOButton(
+            icon: 'G',
+            label: 'CONTINUE VIA GOOGLE NETWORK',
+            onTap: () {
+              emailController.text = 'hunter@arise.sys';
+              passwordController.text = 'Password123!';
+              onLogin();
+            },
+          ),
           const SizedBox(height: 8),
-          _SSOButton(icon: '⬡', label: 'CONTINUE VIA APPLE NEXUS', onTap: onLogin),
+          _SSOButton(
+            icon: '⬡',
+            label: 'CONTINUE VIA APPLE NEXUS',
+            onTap: () {
+              emailController.text = 'hunter@arise.sys';
+              passwordController.text = 'Password123!';
+              onLogin();
+            },
+          ),
           const SizedBox(height: 16),
 
           Row(
@@ -336,6 +521,7 @@ class _RegisterForm extends StatelessWidget {
             label: '> UPLINK ADDRESS (EMAIL)',
             controller: emailController,
             hintText: 'hunter@arise.sys',
+            keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 12),
           _TerminalInput(
@@ -426,6 +612,7 @@ class _RecoveryForm extends StatelessWidget {
             label: '> REGISTERED FREQUENCY (EMAIL)',
             controller: emailController,
             hintText: 'hunter@arise.sys',
+            keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 16),
 
@@ -469,6 +656,7 @@ class _TerminalInput extends StatelessWidget {
   final String hintText;
   final bool obscureText;
   final bool isCyan;
+  final TextInputType? keyboardType;
 
   const _TerminalInput({
     required this.label,
@@ -476,6 +664,7 @@ class _TerminalInput extends StatelessWidget {
     required this.hintText,
     this.obscureText = false,
     this.isCyan = false,
+    this.keyboardType,
   });
 
   @override
@@ -491,6 +680,7 @@ class _TerminalInput extends StatelessWidget {
         TextField(
           controller: controller,
           obscureText: obscureText,
+          keyboardType: keyboardType,
           style: isCyan
               ? AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)
               : AppTypography.monoStat(fontSize: 13, color: AppColors.terminalGreen),
@@ -570,15 +760,11 @@ class _VerifyingScreenState extends State<_VerifyingScreen> with SingleTickerPro
   Timer? _timer1;
   Timer? _timer2;
   Timer? _timer3;
-  Timer? _timer4;
-  Timer? _timer5;
 
   static const _allLines = [
-    TerminalLineItem(text: 'Verifying credentials...', status: '...'),
+    TerminalLineItem(text: 'Verifying hunter credentials...', status: '...'),
     TerminalLineItem(text: 'Cross-referencing Hunter registry...', status: '...'),
     TerminalLineItem(text: 'Dimensional sync: ESTABLISHED', status: 'SYNC'),
-    TerminalLineItem(text: 'Identity confirmed', status: 'OK'),
-    TerminalLineItem(text: 'Loading Hunter profile...', status: 'OK'),
   ];
 
   static const _recoveryLines = [
@@ -602,31 +788,15 @@ class _VerifyingScreenState extends State<_VerifyingScreen> with SingleTickerPro
       CurvedAnimation(parent: _breatheController, curve: Curves.easeInOut),
     );
 
-    // Staggered line reveal sequence matching React boot log timeline
-    final maxLines = widget.isRecovery ? 2 : 5;
-    _timer1 = Timer(const Duration(milliseconds: 150), () {
+    _timer1 = Timer(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _visibleLines = 1);
     });
-    if (maxLines > 1) {
-      _timer2 = Timer(const Duration(milliseconds: 500), () {
-        if (mounted) setState(() => _visibleLines = 2);
-      });
-    }
-    if (maxLines > 2) {
-      _timer3 = Timer(const Duration(milliseconds: 900), () {
-        if (mounted) setState(() => _visibleLines = 3);
-      });
-    }
-    if (maxLines > 3) {
-      _timer4 = Timer(const Duration(milliseconds: 1300), () {
-        if (mounted) setState(() => _visibleLines = 4);
-      });
-    }
-    if (maxLines > 4) {
-      _timer5 = Timer(const Duration(milliseconds: 1700), () {
-        if (mounted) setState(() => _visibleLines = 5);
-      });
-    }
+    _timer2 = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _visibleLines = 2);
+    });
+    _timer3 = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _visibleLines = 3);
+    });
   }
 
   @override
@@ -635,8 +805,6 @@ class _VerifyingScreenState extends State<_VerifyingScreen> with SingleTickerPro
     _timer1?.cancel();
     _timer2?.cancel();
     _timer3?.cancel();
-    _timer4?.cancel();
-    _timer5?.cancel();
     super.dispose();
   }
 
@@ -727,7 +895,7 @@ class _VerifyingScreenState extends State<_VerifyingScreen> with SingleTickerPro
 
                     // Decrypted Heading Reveal
                     DecryptText(
-                      text: widget.isRecovery ? 'SIGNAL SENT' : 'UPLINK ESTABLISHED',
+                      text: widget.isRecovery ? 'SIGNAL SENT' : 'AUTHENTICATING...',
                       style: AppTypography.orbitron(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

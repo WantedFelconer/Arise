@@ -136,6 +136,7 @@ export class QuestRepository {
   }
 
   async create(data: {
+    id?: string;
     userId: string;
     title: string;
     description?: string | null;
@@ -151,7 +152,7 @@ export class QuestRepository {
     metadata?: Record<string, unknown> | null;
     status?: string;
   }) {
-    const id = crypto.randomUUID();
+    const id = data.id || crypto.randomUUID();
     const now = new Date();
 
     if (this.isDbAvailable()) {

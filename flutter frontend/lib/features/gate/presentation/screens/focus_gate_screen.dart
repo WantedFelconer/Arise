@@ -1,30 +1,29 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_back_button.dart';
 import '../../../../core/design_system/components/glass_card.dart';
 import '../../../../core/design_system/components/particle_field.dart';
 import '../../../../core/design_system/components/pressable_card.dart';
+import '../../../../core/providers/quest_provider.dart';
+import '../providers/gate_provider.dart';
 
-class FocusGateScreen extends StatefulWidget {
+class FocusGateScreen extends ConsumerStatefulWidget {
   final ValueChanged<bool> onExit;
 
   const FocusGateScreen({super.key, required this.onExit});
 
   @override
-  State<FocusGateScreen> createState() => _FocusGateScreenState();
+  ConsumerState<FocusGateScreen> createState() => _FocusGateScreenState();
 }
 
-class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderStateMixin {
-  late final ValueNotifier<int> _secondsNotifier = ValueNotifier<int>(25 * 60);
+class _FocusGateScreenState extends ConsumerState<FocusGateScreen>
+    with TickerProviderStateMixin {
   int _targetSeconds = 25 * 60;
-  bool _running = false;
-  bool _collapsed = false;
+  String? _selectedQuestId;
   bool _showExitWarning = false;
-  bool _sessionDone = false;
-  Timer? _timer;
 
   late AnimationController _breatheController;
   late Animation<double> _breatheAnimation;
@@ -62,58 +61,54 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _secondsNotifier.dispose();
     _breatheController.dispose();
     _shakeController.dispose();
     super.dispose();
   }
 
-  void _toggleTimer() {
-    setState(() {
-      _running = !_running;
-      if (_running) {
-        _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-          if (_secondsNotifier.value > 0) {
-            _secondsNotifier.value--;
-          } else {
-            t.cancel();
-            if (mounted) {
-              setState(() {
-                _running = false;
-                _sessionDone = true;
-              });
-            }
-          }
-        });
-      } else {
-        _timer?.cancel();
-      }
-    });
-  }
-
   void _triggerCollapse() {
     setState(() {
       _showExitWarning = false;
-      _collapsed = true;
     });
+    ref.read(gateNotifierProvider.notifier).collapseSession(exitReason: 'user_fled');
     _shakeController.forward(from: 0.0);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_sessionDone) {
-      return _buildVictoryView();
+    final gateState = ref.watch(gateNotifierProvider);
+    final questState = ref.watch(questNotifierProvider);
+
+    if (gateState.isCleared) {
+      return _buildVictoryView(gateState);
     }
-    if (_collapsed) {
-      return _buildCollapseView();
+    if (gateState.isCollapsed) {
+      return _buildCollapseView(gateState);
     }
+
+    final isRunning = gateState.isRunning;
+    final isPaused = gateState.isPaused;
+    final seconds = isRunning || isPaused
+        ? gateState.secondsRemaining
+        : _targetSeconds;
+    final totalPlanned = isRunning || isPaused
+        ? (gateState.activeSession?.plannedDurationS ?? _targetSeconds)
+        : _targetSeconds;
+    final pct = (seconds / totalPlanned).clamp(0.0, 1.0);
+    final mm = (seconds ~/ 60).toString().padLeft(2, '0');
+    final ss = (seconds % 60).toString().padLeft(2, '0');
+    final stability = gateState.stabilityPct.round();
+
+    final activeQuests = questState.quests.where((q) => !q.done).toList();
+    final linkedQuest = _selectedQuestId != null
+        ? activeQuests.where((q) => q.id == _selectedQuestId).firstOrNull
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.voidEdge,
       body: Stack(
         children: [
-          // 1. Ambient Floating Particles Layer (Always visible behind controls)
+          // 1. Ambient Floating Particles Layer
           const Positioned.fill(child: ParticleField(count: 16)),
 
           // 2. Foreground Screen Content
@@ -129,19 +124,94 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('[ GATE ENTRY — FOCUS MODE ]', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled)),
+                          Row(
+                            children: [
+                              Text(
+                                '[ GATE ENTRY — FOCUS MODE ]',
+                                style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled),
+                              ),
+                              if (gateState.activeSession?.syncStatus == 'pending') ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.warningAmber.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text('OFFLINE BUFFER', style: AppTypography.monoStat(fontSize: 7, color: AppColors.warningAmber)),
+                                ),
+                              ],
+                            ],
+                          ),
                           const SizedBox(height: 2),
-                          Text('DEEP WORK SESSION', style: AppTypography.orbitron(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          Text(
+                            linkedQuest != null
+                                ? linkedQuest.title.toUpperCase()
+                                : 'DEEP WORK EXPEDITION',
+                            style: AppTypography.orbitron(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
                         ],
                       ),
                       AriseBackButton(
-                        onPressed: () => setState(() => _showExitWarning = true),
-                        label: 'EXIT',
+                        onPressed: () {
+                          if (isRunning || isPaused) {
+                            setState(() => _showExitWarning = true);
+                          } else {
+                            widget.onExit(false);
+                          }
+                        },
+                        label: isRunning || isPaused ? 'ABANDON' : 'EXIT',
                         showArrow: false,
                       ),
                     ],
                   ),
                 ),
+
+                // Stability indicator banner when active
+                if (isRunning || isPaused)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.manaCyan.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('GATE STABILITY', style: AppTypography.monoStat(fontSize: 9, color: AppColors.manaCyan)),
+                        Text('$stability% / 100%', style: AppTypography.monoStat(fontSize: 9, color: AppColors.terminalGreen, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+
+                // Error / warning banner
+                if (gateState.error != null)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerRed.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.dangerRed),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('⚠ ', style: TextStyle(color: AppColors.dangerRed, fontSize: 12)),
+                        Expanded(
+                          child: Text(
+                            gateState.error!,
+                            style: AppTypography.rajdhani(fontSize: 12, color: AppColors.dangerRed),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                 // Portal visual + timer
                 Expanded(
@@ -158,84 +228,83 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                             const _RotatingPortalRings(),
 
                             // Progress ring & center glow
-                            ValueListenableBuilder<int>(
-                              valueListenable: _secondsNotifier,
-                              builder: (context, seconds, child) {
-                                final pct = seconds / _targetSeconds;
-                                final mm = (seconds ~/ 60).toString().padLeft(2, '0');
-                                final ss = (seconds % 60).toString().padLeft(2, '0');
-
-                                return Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    AnimatedBuilder(
-                                      animation: _breatheAnimation,
-                                      builder: (context, child) {
-                                        return Transform.scale(
-                                          scale: _breatheAnimation.value,
-                                          child: Stack(
-                                            alignment: Alignment.center,
-                                            children: [
-                                              Container(
-                                                width: 120,
-                                                height: 120,
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  gradient: RadialGradient(
-                                                    colors: [
-                                                      Color(0x333EE6F5),
-                                                      Color(0x053EE6F5),
-                                                    ],
-                                                  ),
-                                                  boxShadow: [
-                                                    BoxShadow(color: Color(0x4D3EE6F5), blurRadius: 40),
-                                                  ],
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                width: 260,
-                                                height: 260,
-                                                child: CustomPaint(
-                                                  painter: _PortalTimerPainter(pct: pct),
-                                                ),
-                                              ),
+                            AnimatedBuilder(
+                              animation: _breatheAnimation,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _breatheAnimation.value,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Container(
+                                        width: 120,
+                                        height: 120,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: RadialGradient(
+                                            colors: [
+                                              Color(0x333EE6F5),
+                                              Color(0x053EE6F5),
                                             ],
                                           ),
-                                        );
-                                      },
-                                    ),
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          '$mm:$ss',
-                                          style: AppTypography.monoStat(
-                                            fontSize: 52,
-                                            color: AppColors.textPrimary,
-                                            letterSpacing: 0.05,
-                                          ).copyWith(
-                                            shadows: const [
-                                              Shadow(color: Color(0x803EE6F5), blurRadius: 20),
-                                            ],
-                                          ),
+                                          boxShadow: [
+                                            BoxShadow(color: Color(0x4D3EE6F5), blurRadius: 40),
+                                          ],
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _running ? 'INSIDE THE GATE' : 'READY TO ENTER',
-                                          style: AppTypography.orbitron(fontSize: 9, color: AppColors.textSecondary, letterSpacing: 0.12),
+                                      ),
+                                      SizedBox(
+                                        width: 260,
+                                        height: 260,
+                                        child: CustomPaint(
+                                          painter: _PortalTimerPainter(pct: pct),
                                         ),
-                                      ],
-                                    ),
-                                  ],
+                                      ),
+                                    ],
+                                  ),
                                 );
                               },
+                            ),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '$mm:$ss',
+                                  style: AppTypography.monoStat(
+                                    fontSize: 52,
+                                    color: isPaused ? AppColors.warningAmber : AppColors.textPrimary,
+                                    letterSpacing: 0.05,
+                                  ).copyWith(
+                                    shadows: [
+                                      Shadow(
+                                        color: isPaused
+                                            ? const Color(0x80FFB703)
+                                            : const Color(0x803EE6F5),
+                                        blurRadius: 20,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  isPaused
+                                      ? 'GATE PAUSED'
+                                      : (isRunning ? 'INSIDE THE GATE' : 'READY TO ENTER'),
+                                  style: AppTypography.orbitron(
+                                    fontSize: 9,
+                                    color: isPaused ? AppColors.warningAmber : AppColors.textSecondary,
+                                    letterSpacing: 0.12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 28),
                       Text(
-                        '[ Leaving the Gate before clearing it\nwill trigger a Penalty. ]',
+                        isRunning || isPaused
+                            ? '[ Gate Stability rising uninterrupted.\nExiting early collapses the Gate. ]'
+                            : '[ Select focus duration & enter the Gate.\nMaintain focus to stabilize the barrier. ]',
                         textAlign: TextAlign.center,
                         style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled, height: 1.6),
                       ),
@@ -248,26 +317,68 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                   child: Column(
                     children: [
-                      if (!_running) ...[
+                      if (!isRunning && !isPaused) ...[
+                        // Linked Quest Selection
+                        if (activeQuests.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.voidEdge,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.2)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String?>(
+                                isExpanded: true,
+                                dropdownColor: const Color(0xFF0D131F),
+                                value: _selectedQuestId,
+                                hint: Text('LINK FOCUS TO A QUEST (OPTIONAL)', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textDisabled)),
+                                items: [
+                                  DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('NO LINKED QUEST (FREE FOCUS)', style: AppTypography.monoStat(fontSize: 10, color: AppColors.textPrimary)),
+                                  ),
+                                  ...activeQuests.map((q) => DropdownMenuItem<String?>(
+                                        value: q.id,
+                                        child: Text(q.title, style: AppTypography.rajdhani(fontSize: 13, color: AppColors.manaCyan), overflow: TextOverflow.ellipsis),
+                                      )),
+                                ],
+                                onChanged: (val) => setState(() => _selectedQuestId = val),
+                              ),
+                            ),
+                          ),
+
+                        // Duration selector
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [15, 25, 45, 60].map((min) {
-                            final isSel = _secondsNotifier.value == min * 60;
+                            final isSel = _targetSeconds == min * 60;
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4.0),
                               child: PressableCard(
                                 onTap: () => setState(() {
                                   _targetSeconds = min * 60;
-                                  _secondsNotifier.value = min * 60;
                                 }),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
                                     color: isSel ? AppColors.manaCyan.withValues(alpha: 0.15) : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: isSel ? AppColors.manaCyan.withValues(alpha: 0.5) : AppColors.manaCyan.withValues(alpha: 0.1)),
+                                    border: Border.all(
+                                      color: isSel
+                                          ? AppColors.manaCyan.withValues(alpha: 0.5)
+                                          : AppColors.manaCyan.withValues(alpha: 0.1),
+                                    ),
                                   ),
-                                  child: Text('${min}M', style: AppTypography.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: isSel ? AppColors.manaCyan : AppColors.textDisabled)),
+                                  child: Text(
+                                    '${min}M',
+                                    style: AppTypography.orbitron(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSel ? AppColors.manaCyan : AppColors.textDisabled,
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
@@ -276,38 +387,93 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                         const SizedBox(height: 14),
                       ],
 
-                      // Translucent Pause / Active Start CTA (Particle drift remains visible through button)
-                      PressableCard(
-                        onTap: _toggleTimer,
-                        pressedScale: 0.96,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            // Translucent dark red background when running (10% opacity)
-                            color: _running ? const Color(0x1AFF2E4D) : AppColors.manaCyan,
-                            border: _running ? Border.all(color: const Color(0x66FF2E4D)) : null,
-                            gradient: _running ? null : const LinearGradient(colors: [Color(0xFF3EE6F5), Color(0xFF1FA9C2)]),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _running ? const Color(0x33FF2E4D) : const Color(0x663EE6F5),
-                                blurRadius: _running ? 16 : 24,
+                      // CTA Buttons
+                      if (!isRunning && !isPaused)
+                        PressableCard(
+                          onTap: () {
+                            ref.read(gateNotifierProvider.notifier).startSession(
+                                  questId: _selectedQuestId,
+                                  durationSeconds: _targetSeconds,
+                                );
+                          },
+                          pressedScale: 0.96,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: AppColors.manaCyan,
+                              gradient: const LinearGradient(colors: [Color(0xFF3EE6F5), Color(0xFF1FA9C2)]),
+                              boxShadow: const [
+                                BoxShadow(color: Color(0x663EE6F5), blurRadius: 24),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '⚡ ENTER THE GATE',
+                              style: AppTypography.orbitron(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                letterSpacing: 0.12,
                               ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            _running ? '⏸ PAUSE SESSION' : '⚡ ENTER THE GATE',
-                            style: AppTypography.orbitron(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: _running ? AppColors.dangerRed : Colors.black,
-                              letterSpacing: 0.12,
                             ),
                           ),
+                        )
+                      else ...[
+                        Row(
+                          children: [
+                            if (isPaused)
+                              Expanded(
+                                child: PressableCard(
+                                  onTap: () => ref.read(gateNotifierProvider.notifier).resumeSession(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.manaCyan.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: AppColors.manaCyan),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text('▶ RESUME', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.manaCyan)),
+                                  ),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: PressableCard(
+                                  onTap: () => ref.read(gateNotifierProvider.notifier).pauseSession(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x1AFFB703),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0x66FFB703)),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text('⏸ PAUSE', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.warningAmber)),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: PressableCard(
+                                onTap: () => setState(() => _showExitWarning = true),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x1AFF2E4D),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0x66FF2E4D)),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text('✕ ABANDON', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.dangerRed)),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -329,10 +495,18 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('⚠ ABANDON GATE?', style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.dangerRed, letterSpacing: 0.12)),
+                          Text(
+                            '⚠ ABANDON GATE?',
+                            style: AppTypography.orbitron(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.dangerRed,
+                              letterSpacing: 0.12,
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           Text(
-                            '[ Exiting now will trigger the Penalty Protocol.\nYour streak will be compromised.\nThe System does not forgive. ]',
+                            '[ Exiting now collapses the Gate immediately.\nPenalty Protocol will deduct XP & Mana.\nHardcore Mode triggers Boss HP recovery. ]',
                             textAlign: TextAlign.center,
                             style: AppTypography.rajdhani(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
                           ),
@@ -350,7 +524,7 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                                       border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.3)),
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text('CONTINUE', style: AppTypography.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.manaCyan)),
+                                    child: Text('STAY IN GATE', style: AppTypography.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.manaCyan)),
                                   ),
                                 ),
                               ),
@@ -365,7 +539,7 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                                       border: Border.all(color: AppColors.dangerRed.withValues(alpha: 0.4)),
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text('FLEE', style: AppTypography.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.dangerRed)),
+                                    child: Text('COLLAPSE GATE', style: AppTypography.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.dangerRed)),
                                   ),
                                 ),
                               ),
@@ -383,7 +557,12 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildVictoryView() {
+  Widget _buildVictoryView(GateState gateState) {
+    final cascade = gateState.lastCascadeResult;
+    final xpAward = (cascade?['xpDelta'] as num?)?.toInt() ?? 200;
+    final manaReward = (cascade?['manaDelta'] as num?)?.toInt() ?? 10;
+    final bossDamage = (cascade?['bossDamage'] as num?)?.toInt();
+
     return Scaffold(
       backgroundColor: AppColors.voidEdge,
       body: Center(
@@ -392,7 +571,7 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('[ GATE CLEARED ]', style: AppTypography.monoStat(fontSize: 11, color: AppColors.terminalGreen)),
+              Text('[ GATE CLEARED — 100% STABILITY ]', style: AppTypography.monoStat(fontSize: 11, color: AppColors.terminalGreen)),
               const SizedBox(height: 4),
               Text(
                 'VICTORY',
@@ -402,15 +581,25 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
               ),
               const SizedBox(height: 8),
               Text(
-                'You have returned from the Gate.\nThe System has recorded your effort.',
+                'Expedition complete. Focus sustained without interruption.\nAuthoritative rewards queued for ledger verification.',
                 textAlign: TextAlign.center,
                 style: AppTypography.rajdhani(fontSize: 14, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 20),
               GlassCard(
                 borderColor: AppColors.terminalGreen.withValues(alpha: 0.3),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Text('+200 EXP · Gate Complete', style: AppTypography.monoStat(fontSize: 12, color: AppColors.terminalGreen)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  children: [
+                    Text('+$xpAward EXP · Gate Clear Reward', style: AppTypography.monoStat(fontSize: 12, color: AppColors.terminalGreen)),
+                    const SizedBox(height: 4),
+                    Text('+$manaReward MANA · Focus Restoration', style: AppTypography.monoStat(fontSize: 12, color: AppColors.manaCyan)),
+                    if (bossDamage != null && bossDamage > 0) ...[
+                      const SizedBox(height: 4),
+                      Text('-$bossDamage BOSS HP · Linked Quest Strike', style: AppTypography.monoStat(fontSize: 12, color: AppColors.rankA)),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 28),
               PressableCard(
@@ -431,7 +620,11 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildCollapseView() {
+  Widget _buildCollapseView(GateState gateState) {
+    final penalty = gateState.lastPenaltyResult;
+    final xpLoss = (penalty?['xpPenalty'] as num?)?.toInt() ?? 50;
+    final manaLoss = (penalty?['manaPenalty'] as num?)?.toInt() ?? 20;
+
     return Scaffold(
       backgroundColor: const Color(0xF8030712),
       body: AnimatedBuilder(
@@ -449,7 +642,6 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Gate collapse 3 red rotating orbital rings visual
                 const _RedOrbitalRings(),
                 const SizedBox(height: 24),
 
@@ -467,7 +659,7 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '[ You abandoned the Gate before clearing it. ]\nThe System has registered your failure.',
+                  '[ Focus was severed before full stabilization. ]\nThe System has applied the Penalty Protocol.',
                   textAlign: TextAlign.center,
                   style: AppTypography.rajdhani(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
                 ),
@@ -476,7 +668,7 @@ class _FocusGateScreenState extends State<FocusGateScreen> with TickerProviderSt
                   borderColor: AppColors.dangerRed.withValues(alpha: 0.4),
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    '−150 EXP · Gate Abandoned\nSTREAK RESET TO 0\nPENALTY QUEST ASSIGNED',
+                    '−$xpLoss EXP · Gate Abandoned\n−$manaLoss MANA · Mental Energy Depletion\nPENALTY PROTOCOL INITIATED',
                     textAlign: TextAlign.center,
                     style: AppTypography.monoStat(fontSize: 11, color: AppColors.dangerRed, height: 1.6),
                   ),
@@ -510,7 +702,8 @@ class _RotatingPortalRings extends StatefulWidget {
   State<_RotatingPortalRings> createState() => _RotatingPortalRingsState();
 }
 
-class _RotatingPortalRingsState extends State<_RotatingPortalRings> with SingleTickerProviderStateMixin {
+class _RotatingPortalRingsState extends State<_RotatingPortalRings>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late final List<Widget> _staticRings;
 
@@ -559,7 +752,8 @@ class _RotatingPortalRingsState extends State<_RotatingPortalRings> with SingleT
           children: _staticRings.asMap().entries.map((entry) {
             final idx = entry.key;
             final speedMultiplier = 1.0 + idx * 0.5;
-            final angle = val * 2 * math.pi * speedMultiplier * (idx % 2 == 0 ? 1 : -1);
+            final angle =
+                val * 2 * math.pi * speedMultiplier * (idx % 2 == 0 ? 1 : -1);
 
             return Transform.rotate(
               angle: angle,
@@ -580,7 +774,8 @@ class _RedOrbitalRings extends StatefulWidget {
   State<_RedOrbitalRings> createState() => _RedOrbitalRingsState();
 }
 
-class _RedOrbitalRingsState extends State<_RedOrbitalRings> with SingleTickerProviderStateMixin {
+class _RedOrbitalRingsState extends State<_RedOrbitalRings>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late final List<Widget> _staticRedRings;
 
@@ -600,15 +795,9 @@ class _RedOrbitalRingsState extends State<_RedOrbitalRings> with SingleTickerPro
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
-            color: AppColors.dangerRed.withValues(alpha: 0.4),
-            width: 2.0,
+            color: AppColors.dangerRed.withValues(alpha: 0.3),
+            width: 1.5,
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x80FF2E4D),
-              blurRadius: 6,
-            ),
-          ],
         ),
       );
     }).toList();
@@ -622,41 +811,22 @@ class _RedOrbitalRingsState extends State<_RedOrbitalRings> with SingleTickerPro
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 128,
-      height: 128,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final val = _controller.value;
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              ..._staticRedRings.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final speedMultiplier = 1.0 + idx * 0.33;
-                final angle = val * 2 * math.pi * speedMultiplier * (idx % 2 == 0 ? 1 : -1);
-
-                return Transform.rotate(
-                  angle: angle,
-                  child: entry.value,
-                );
-              }),
-              Text(
-                '⬡',
-                style: AppTypography.orbitron(
-                  fontSize: 32,
-                  color: AppColors.dangerRed,
-                ).copyWith(
-                  shadows: const [
-                    Shadow(color: Color(0x80FF2E4D), blurRadius: 10),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final val = _controller.value;
+        return Stack(
+          alignment: Alignment.center,
+          children: _staticRedRings.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final angle = val * 2 * math.pi * (idx % 2 == 0 ? 1 : -1);
+            return Transform.rotate(
+              angle: angle,
+              child: entry.value,
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
@@ -669,30 +839,35 @@ class _PortalTimerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 10;
+    final radius = (size.width - 20) / 2;
 
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = AppColors.manaCyan.withValues(alpha: 0.06)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4,
-    );
+    // Background track
+    final bgPaint = Paint()
+      ..color = const Color(0x1A3EE6F5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6.0;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Progress arc
+    final sweepAngle = 2 * math.pi * pct;
+    final fgPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF3EE6F5), Color(0xFF1FA9C2)],
+      ).createShader(Rect.fromCircle(center: center, radius: radius))
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 6.0;
 
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2,
-      2 * math.pi * pct,
+      sweepAngle,
       false,
-      Paint()
-        ..color = AppColors.manaCyan
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4
-        ..strokeCap = StrokeCap.round,
+      fgPaint,
     );
   }
 
   @override
-  bool shouldRepaint(covariant _PortalTimerPainter oldDelegate) => oldDelegate.pct != pct;
+  bool shouldRepaint(covariant _PortalTimerPainter oldDelegate) =>
+      oldDelegate.pct != pct;
 }

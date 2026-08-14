@@ -79,7 +79,7 @@ export class SettingsService {
     const xpTransactions = memoryDb.xpTransactions.filter((tx) => tx.characterId === userId);
     const manaTransactions = memoryDb.manaTransactions.filter((tx) => tx.characterId === userId);
     const quests = Array.from(memoryDb.quests.values()).filter((q) => q.userId === userId);
-    const habits = Array.from(memoryDb.habits.values()).filter((h) => h.userId === userId);
+    const habits = Array.from(memoryDb.habits.values()).filter((h: any) => h && h.userId === userId);
     const bosses = Array.from(memoryDb.bosses.values()).filter((b) => b.userId === userId);
     const dungeons = Array.from(memoryDb.dungeons.values()).filter((d) => d.userId === userId);
     const gateSessions = Array.from(memoryDb.gateSessions.values()).filter((g) => g.userId === userId);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const createQuestSchema = z.object({
+  id: z.string().uuid().optional(),
   title: z.string().min(1).max(255),
   description: z.string().max(4000).optional().nullable(),
   questType: z

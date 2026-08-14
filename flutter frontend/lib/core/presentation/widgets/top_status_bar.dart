@@ -6,7 +6,9 @@ import '../../../app/theme/app_typography.dart';
 import '../../design_system/components/arise_pressable.dart';
 import '../../design_system/components/glass_card.dart';
 import '../../design_system/components/uplink_chip.dart';
+import '../../network/network_status.dart';
 import '../../providers/player_provider.dart';
+import '../../sync/sync_engine.dart';
 
 class TopStatusBar extends ConsumerWidget {
   final bool uplinkStable;
@@ -35,6 +37,11 @@ class TopStatusBar extends ConsumerWidget {
     final maxMp = player.maxMp;
     final level = player.level;
     final streak = player.streak;
+
+    final networkStatus = ref.watch(networkStatusServiceProvider).current;
+    final isOnline = networkStatus == NetworkStatus.online;
+    final syncState = ref.watch(syncStateProvider).valueOrNull ?? const SyncState();
+
     return Positioned(
       top: 0,
       left: 0,
@@ -103,7 +110,11 @@ class TopStatusBar extends ConsumerWidget {
                 // Left side: Uplink Chip & Demo Penalty Trigger
                 Row(
                   children: [
-                    UplinkChip(stable: uplinkStable),
+                    UplinkChip(
+                      stable: isOnline && uplinkStable,
+                      syncStatus: syncState.status,
+                      pendingCount: syncState.pendingCount,
+                    ),
                     if (onPenaltyClick != null) ...[
                       const SizedBox(width: 6),
                       ArisePressable(
@@ -147,7 +158,7 @@ class TopStatusBar extends ConsumerWidget {
                     ArisePressable(
                       onTap: onManaCoreClick,
                       borderRadius: BorderRadius.circular(12),
-                      child: const _MiniManaRing(pct: 0.65),
+                      child: _MiniManaRing(pct: player.manaRatio),
                     ),
 
                     // Notifications shortcut (Single & authoritative)

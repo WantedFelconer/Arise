@@ -5,7 +5,27 @@ description: Global, always-apply project rules for ARISE (Life Operating System
 
 # ARISE — Global Project Rules
 
-You are working on **ARISE**, an offline-first, gamified, AI-assisted personal productivity platform ("Life Operating System"). A Flutter frontend already exists. Your job (across sprints) is to build the backend, the local database/sync layer, and wire it to that frontend — never to rebuild or redesign the frontend from scratch.
+You are working on **ARISE**, an offline-first, gamified, AI-assisted personal productivity platform ("Life Operating System"). A Flutter frontend already exists. 
+
+The existing Flutter frontend is the product UI baseline.
+
+Do not rebuild it from scratch or replace its visual identity.
+
+However, you MAY and SHOULD modify existing Flutter screens, layouts,
+components, navigation, states, and interactions when required to:
+
+- fix identified UX/UI defects
+- support real data
+- support offline-first behavior
+- support loading/error/empty/offline/sync states
+- improve accessibility
+- improve responsive behavior
+- remove misleading placeholder behavior
+- correct performance problems
+
+UI changes must preserve the ARISE design language and must be justified
+by usability, correctness, integration, accessibility, or performance.
+Do not redesign merely for personal aesthetic preference.
 
 Authoritative references, in order of precedence: `ARISE_SRS.md` (the spec) > `SPRINT_PLAN.md` (what to build now) > this file (how to build it) > your own judgment. If this file and the SRS ever conflict, the SRS wins and you should flag the conflict rather than silently picking one.
 

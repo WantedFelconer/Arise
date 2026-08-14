@@ -105,11 +105,10 @@ export class ScreenTimeService {
 
       // Category breakdown
       const durMins = Math.round(s.durationS / 60);
-      if (!categoryBreakdown[s.category]) {
-        categoryBreakdown[s.category] = { durationMinutes: 0, manaImpact: 0 };
-      }
-      categoryBreakdown[s.category].durationMinutes += durMins;
-      categoryBreakdown[s.category].manaImpact += s.manaModifierApplied;
+      const catEntry = categoryBreakdown[s.category] ?? { durationMinutes: 0, manaImpact: 0 };
+      catEntry.durationMinutes += durMins;
+      catEntry.manaImpact += s.manaModifierApplied;
+      categoryBreakdown[s.category] = catEntry;
 
       // Track distraction hours
       if (s.category === 'high_distraction' || s.category === 'entertainment') {

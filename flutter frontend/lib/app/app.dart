@@ -27,6 +27,7 @@ import '../features/calendar/presentation/screens/calendar_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/ai_coach/presentation/screens/ai_coach_screen.dart';
 import '../features/boss/presentation/screens/boss_detail_screen.dart';
+import '../features/auth/application/auth_notifier.dart';
 import '../features/notifications/presentation/screens/notifications_screen.dart';
 
 class AriseApp extends ConsumerStatefulWidget {
@@ -49,6 +50,11 @@ class _AriseAppState extends ConsumerState<AriseApp> {
         systemNavigationBarIconBrightness: Brightness.light,
       ),
     );
+
+    // Asynchronously restore session on launch without blocking UI render
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authNotifierProvider.notifier).restoreSession();
+    });
   }
 
   @override

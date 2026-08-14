@@ -57,51 +57,56 @@ class _ScanlineSweepState extends State<ScanlineSweep> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     if (_controller.isCompleted) return const SizedBox.shrink();
-    final screenHeight = MediaQuery.of(context).size.height;
 
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          if (_controller.isCompleted) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final screenHeight = constraints.maxHeight;
+            return AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                if (_controller.isCompleted) return const SizedBox.shrink();
+                final topPos = _topAnimation.value * screenHeight;
 
-          final topPos = _topAnimation.value * screenHeight;
-
-          return Positioned(
-            top: topPos,
-            left: 0,
-            right: 0,
-            height: 2,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: _opacityAnimation.value.clamp(0.0, 1.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        AppColors.manaCyan,
-                        Colors.transparent,
-                      ],
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Transform.translate(
+                    offset: Offset(0, topPos),
+                    child: Opacity(
+                      opacity: _opacityAnimation.value.clamp(0.0, 1.0),
+                      child: Container(
+                        height: 2,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              AppColors.manaCyan,
+                              Colors.transparent,
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.manaCyan.withValues(alpha: 0.8),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            ),
+                            BoxShadow(
+                              color: AppColors.manaCyan.withValues(alpha: 0.5),
+                              blurRadius: 30,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.manaCyan.withValues(alpha: 0.8),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                      BoxShadow(
-                        color: AppColors.manaCyan.withValues(alpha: 0.5),
-                        blurRadius: 30,
-                        spreadRadius: 4,
-                      ),
-                    ],
                   ),
-                ),
-              ),
-            ),
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

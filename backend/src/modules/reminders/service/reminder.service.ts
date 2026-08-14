@@ -109,9 +109,9 @@ export class ReminderService {
 
     // 2. Daily/Weekly time of day + days of week
     if (config.timeOfDay) {
-      const [hourStr, minStr] = config.timeOfDay.split(':');
-      const targetHour = parseInt(hourStr, 10);
-      const targetMin = parseInt(minStr, 10);
+      const parts = config.timeOfDay.split(':');
+      const targetHour = parseInt(parts[0] || '0', 10);
+      const targetMin = parseInt(parts[1] || '0', 10);
 
       const currentHour = now.getUTCHours();
       const currentMin = now.getUTCMinutes();

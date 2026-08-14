@@ -1,0 +1,16 @@
+{
+  "name": "arise-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ARISE — Offline-first, gamified Life Operating System",
+  "scripts": {
+    "start:dev": "npm --prefix backend run start:dev",
+    "start": "npm --prefix backend run start",
+    "build": "npm --prefix backend run build",
+    "test": "npm --prefix backend run test",
+    "test:flutter": "cd \"flutter frontend\" && flutter test",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "prisma:studio": "cd backend && npx prisma studio --schema=src/db/prisma/schema.prisma"
+  }
+}

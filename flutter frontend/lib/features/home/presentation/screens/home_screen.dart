@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/glass_card.dart';
@@ -46,6 +47,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final doneCount = todayQuests.where((q) => q.done).length;
     final totalCount = todayQuests.length;
 
+    final now = DateTime.now();
+    final dateStr = DateFormat('EEE, MMM d').format(now).toUpperCase();
+
+    final manaPct = player.maxMp > 0 ? (player.mp / player.maxMp * 100).clamp(0, 100).round() : 100;
+    final manaStatusText = manaPct > 50
+        ? 'Reserves stable · Normal consumption'
+        : (manaPct > 20 ? 'Reserves low · Exercise moderation' : '⚠ Critical depletion imminent');
+
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(16, AriseLayoutInsets.topHeaderInset(context), 16, AriseLayoutInsets.bottomContentInset(context)),
       child: Column(
@@ -53,7 +62,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           // Greeting
           Text(
-            '[ SYSTEM ONLINE — MON, AUG 9 ]',
+            '[ SYSTEM ONLINE — $dateStr ]',
             style: AppTypography.monoStat(fontSize: 11, color: AppColors.textDisabled),
           ),
           const SizedBox(height: 4),
@@ -343,16 +352,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                       alignment: Alignment.center,
-                      child: Text('65%', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.manaCyan)),
+                      child: Text('$manaPct%', style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.manaCyan)),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('65% MANA', style: AppTypography.orbitron(fontSize: 14, color: AppColors.manaCyan)),
-                          Text('Reserves stable · Normal consumption', style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('⚠ Depletes in 2h 14m at current pace', style: AppTypography.monoStat(fontSize: 9, color: AppColors.rankA)),
+                          Text('$manaPct% MANA (${player.mp}/${player.maxMp})', style: AppTypography.orbitron(fontSize: 13, color: AppColors.manaCyan)),
+                          Text(manaStatusText, style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
+                          Text(manaPct > 50 ? '✦ Optimal cognitive reserves' : '⚠ Depletion pacing active', style: AppTypography.monoStat(fontSize: 9, color: manaPct > 50 ? AppColors.terminalGreen : AppColors.rankA)),
                         ],
                       ),
                     ),

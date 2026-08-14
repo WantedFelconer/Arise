@@ -22,8 +22,10 @@ import {
   ApprovePlanInput,
 } from '../validation/plan.schema';
 import { AiGeneratedPlanResponse, ApprovePlanResponse } from '../dto/ai-planner.dto';
-import { QuestResponse, QuestDifficulty } from '../../../quests/dto/quest.dto';
+import { QuestResponse } from '../../../quests/dto/quest.dto';
 import { sanitizeObject, sanitizeText } from '../../utils/sanitizer.util';
+
+type QuestDifficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'epic';
 
 @Injectable()
 export class AiPlannerService {

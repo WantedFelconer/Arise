@@ -19,10 +19,10 @@
     "prisma:migrate": "prisma migrate dev --schema=src/db/prisma/schema.prisma"
   },
   "dependencies": {
-    "@nestjs/common": "^10.4.15",
-    "@nestjs/config": "^3.3.0",
-    "@nestjs/core": "^10.4.15",
-    "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/common": "^11.2.0",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.2.0",
+    "@nestjs/platform-express": "^11.2.0",
     "@prisma/client": "^5.22.0",
     "argon2": "^0.41.1",
     "bullmq": "^5.34.2",
@@ -39,9 +39,9 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.4.9",
-    "@nestjs/schematics": "^10.2.3",
-    "@nestjs/testing": "^10.4.15",
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/schematics": "^11.1.0",
+    "@nestjs/testing": "^11.2.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
@@ -50,7 +50,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
@@ -59,7 +59,7 @@
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20.0.0"

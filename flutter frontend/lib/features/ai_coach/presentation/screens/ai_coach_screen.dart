@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_back_button.dart';
@@ -10,82 +10,170 @@ import '../../../../core/design_system/components/glass_card.dart';
 import '../../../../core/design_system/components/ornate_panel.dart';
 import '../../../../core/design_system/components/pressable_card.dart';
 import '../../../../core/design_system/components/uplink_chip.dart';
+import '../../application/ai_coach_notifier.dart';
+import '../../domain/ai_plan.dart';
 
-class AICoachScreen extends StatefulWidget {
+class AICoachScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
 
   const AICoachScreen({super.key, required this.onBack});
 
   @override
-  State<AICoachScreen> createState() => _AICoachScreenState();
+  ConsumerState<AICoachScreen> createState() => _AICoachScreenState();
 }
 
-class _AICoachScreenState extends State<AICoachScreen> {
-  final List<Map<String, String>> _messages = [
-    {
-      'from': 'ai',
-      'text': 'UPLINK ESTABLISHED. I am the System. Your growth is my directive. Today\'s analysis is ready. You\'ve completed 62% of your weekly objectives — strong, but your Vitality stack is underperforming. Shall I recalibrate your quest load?',
-    },
-    {
-      'from': 'user',
-      'text': 'Yes. Plan my week around shipping the app.',
-    },
-  ];
-
+class _AICoachScreenState extends ConsumerState<AICoachScreen> {
   final _controller = TextEditingController();
-  bool _isThinking = false;
-  bool _planVisible = false;
-  bool _planAccepted = false;
+  final _scrollController = ScrollController();
 
   static const actionChips = [
-    '[ DEPLOY QUESTS ]', '[ PLAN MY WEEK ]', '[ ANALYZE MY STATS ]', '[ MOTIVATE ME ]', '[ ADJUST DIFFICULTY ]'
+    '[ PLAN MY WEEK ]',
+    '[ DEPLOY QUESTS ]',
+    '[ DAILY BRIEFING ]',
+    '[ WEEKLY REVIEW ]',
+    '[ SYSTEM NUDGES ]',
   ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _sendMessage(String text) {
     if (text.trim().isEmpty) return;
+    ref.read(aiCoachNotifierProvider.notifier).sendMessage(text.trim());
+    _controller.clear();
+    _scrollToBottom();
+  }
 
-    setState(() {
-      _messages.add({'from': 'user', 'text': text.trim()});
-      _controller.clear();
-      _isThinking = true;
-    });
-
-    final isPlanReq = text.toLowerCase().contains('plan') || text.toLowerCase().contains('week');
-
-    Timer(const Duration(milliseconds: 1400), () {
-      if (mounted) {
-        setState(() {
-          _messages.add({
-            'from': 'ai',
-            'text': isPlanReq
-                ? 'Acknowledged. Processing optimal quest allocation based on your chronotype, streak data, and deadline proximity. Tactical briefing incoming...'
-                : 'Understood, Hunter. The System has processed your directive. Your next objective has been recalibrated. Push forward.',
-          });
-          _isThinking = false;
-        });
-
-        if (isPlanReq) {
-          Timer(const Duration(milliseconds: 2000), () {
-            if (mounted) setState(() => _planVisible = true);
-          });
-        }
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent + 80.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
 
-  void _acceptPlan() {
-    setState(() {
-      _planAccepted = true;
-      _planVisible = false;
-      _messages.add({
-        'from': 'ai',
-        'text': 'QUEST TREE DEPLOYED. Five objectives locked into your registry. Daily vitality stack is running. The week belongs to you, Hunter. Do not squander it.',
-      });
-    });
+  void _showEditPlanDialog(AiGeneratedPlan plan) {
+    final titleController = TextEditingController(text: plan.goal);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.manaCyan),
+        ),
+        title: Text(
+          'EDIT TACTICAL PLAN',
+          style: AppTypography.orbitron(fontSize: 14, color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('GOAL DIRECTIVE', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: TextField(
+                controller: titleController,
+                style: AppTypography.rajdhani(fontSize: 13, color: AppColors.textPrimary),
+                decoration: const InputDecoration(border: InputBorder.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('CANCEL', style: AppTypography.monoStat(fontSize: 11, color: AppColors.textDisabled)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.manaCyan),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(aiCoachNotifierProvider.notifier).editPlan(plan.id, {
+                'goal': titleController.text.trim(),
+              });
+            },
+            child: Text('APPLY EDIT', style: AppTypography.orbitron(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRegenerateDialog(AiGeneratedPlan plan) {
+    final feedbackController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.manaCyan),
+        ),
+        title: Text(
+          'REGENERATE PLAN',
+          style: AppTypography.orbitron(fontSize: 14, color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('TACTICAL FEEDBACK / ADJUSTMENTS', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: TextField(
+                controller: feedbackController,
+                maxLines: 3,
+                style: AppTypography.rajdhani(fontSize: 13, color: AppColors.textPrimary),
+                decoration: const InputDecoration(
+                  hintText: 'E.g., Increase difficulty, focus more on coding...',
+                  hintStyle: TextStyle(color: AppColors.textDisabled),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('CANCEL', style: AppTypography.monoStat(fontSize: 11, color: AppColors.textDisabled)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.manaCyan),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(aiCoachNotifierProvider.notifier).regeneratePlan(
+                plan.id,
+                feedback: feedbackController.text.trim(),
+              );
+            },
+            child: Text('REGENERATE', style: AppTypography.orbitron(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final aiState = ref.watch(aiCoachNotifierProvider);
+    final quota = aiState.quota;
+    final plan = aiState.activePlan;
+
     return Scaffold(
       backgroundColor: AppColors.voidEdge,
       body: SafeArea(
@@ -100,46 +188,176 @@ class _AICoachScreenState extends State<AICoachScreen> {
                   AriseBackButton(onPressed: widget.onBack),
                   Column(
                     children: [
-                      Text('[ SYSTEM AI ]', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
-                      Text('AI COACH', style: AppTypography.orbitron(fontSize: 13, color: AppColors.textPrimary)),
+                      Text('[ SYSTEM AI — NEURAL LINK ]', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
+                      Text('AI COACH & PLANNER', style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                     ],
                   ),
-                  const UplinkChip(stable: true),
+                  Row(
+                    children: [
+                      if (quota != null)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: quota.remaining > 5
+                                ? AppColors.manaCyan.withValues(alpha: 0.15)
+                                : AppColors.dangerRed.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: quota.remaining > 5 ? AppColors.manaCyan : AppColors.dangerRed,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            '${quota.remaining}/${quota.dailyLimit}',
+                            style: AppTypography.monoStat(
+                              fontSize: 9,
+                              color: quota.remaining > 5 ? AppColors.manaCyan : AppColors.dangerRed,
+                            ),
+                          ),
+                        ),
+                      UplinkChip(stable: !aiState.isOffline),
+                    ],
+                  ),
                 ],
               ),
             ),
 
+            // Offline or Quota Banner
+            if (aiState.isOffline)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerRed.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.dangerRed.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off, size: 14, color: AppColors.dangerRed),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'NEURAL UPLINK OFFLINE — LIVE CONNECTION REQUIRED',
+                        style: AppTypography.monoStat(fontSize: 8, color: AppColors.dangerRed),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (aiState.isQuotaExceeded)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.rankA.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.rankA.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hourglass_empty, size: 14, color: AppColors.rankA),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'DAILY AI QUOTA REACHED — RESETS AT UTC MIDNIGHT',
+                        style: AppTypography.monoStat(fontSize: 8, color: AppColors.rankA),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Orb Avatar
             Center(
               child: Container(
-                width: 60,
-                height: 60,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.manaCyan.withValues(alpha: 0.2),
-                  border: Border.all(color: AppColors.manaCyan, width: 2),
-                  boxShadow: const [BoxShadow(color: AppColors.manaCyan, blurRadius: 24)],
+                  color: (aiState.isQuotaExceeded
+                          ? AppColors.rankA
+                          : aiState.isOffline
+                              ? AppColors.dangerRed
+                              : AppColors.manaCyan)
+                      .withValues(alpha: 0.2),
+                  border: Border.all(
+                    color: aiState.isQuotaExceeded
+                        ? AppColors.rankA
+                        : aiState.isOffline
+                            ? AppColors.dangerRed
+                            : AppColors.manaCyan,
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: aiState.isQuotaExceeded
+                          ? AppColors.rankA
+                          : aiState.isOffline
+                              ? AppColors.dangerRed
+                              : AppColors.manaCyan,
+                      blurRadius: 20,
+                    ),
+                  ],
                 ),
                 alignment: Alignment.center,
-                child: const Text('◈', style: TextStyle(fontSize: 24, color: AppColors.manaCyan)),
+                child: const Text('◈', style: TextStyle(fontSize: 22, color: Colors.white)),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              _isThinking ? '[ PROCESSING... ]' : (_planAccepted ? '[ QUEST TREE DEPLOYED ]' : '[ SYSTEM ONLINE ]'),
-              style: AppTypography.monoStat(fontSize: 9, color: AppColors.manaCyan),
+              aiState.isThinking
+                  ? '[ NEURAL SYNTHESIS IN PROGRESS... ]'
+                  : aiState.isOffline
+                      ? '[ UPLINK DISCONNECTED ]'
+                      : aiState.isQuotaExceeded
+                          ? '[ QUOTA EXHAUSTED ]'
+                          : '[ SYSTEM ONLINE ]',
+              style: AppTypography.monoStat(
+                fontSize: 9,
+                color: aiState.isOffline
+                    ? AppColors.dangerRed
+                    : aiState.isQuotaExceeded
+                        ? AppColors.rankA
+                        : AppColors.manaCyan,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
             // Chat Scroll
             Expanded(
               child: ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _messages.length + (_planVisible && !_planAccepted ? 1 : 0),
+                itemCount: aiState.messages.length + (plan != null && plan.isPendingApproval ? 1 : 0),
                 itemBuilder: (context, idx) {
-                  if (idx < _messages.length) {
-                    final msg = _messages[idx];
-                    final isAi = msg['from'] == 'ai';
+                  if (idx < aiState.messages.length) {
+                    final msg = aiState.messages[idx];
+                    final isAi = msg.isAssistant;
+                    final isSys = msg.role == 'system';
+
+                    if (isSys) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10.0),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.glassPanel,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.textDisabled.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              msg.content,
+                              textAlign: TextAlign.center,
+                              style: AppTypography.monoStat(fontSize: 10, color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12.0),
@@ -149,8 +367,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
                         children: [
                           if (isAi)
                             Container(
-                              width: 28,
-                              height: 28,
+                              width: 26,
+                              height: 26,
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
                                 color: AppColors.manaCyan.withValues(alpha: 0.1),
@@ -158,15 +376,23 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                 border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.3)),
                               ),
                               alignment: Alignment.center,
-                              child: const Text('◈', style: TextStyle(fontSize: 12, color: AppColors.manaCyan)),
+                              child: const Text('◈', style: TextStyle(fontSize: 11, color: AppColors.manaCyan)),
                             ),
                           Flexible(
                             child: GlassCard(
-                              borderColor: isAi ? AppColors.manaCyan.withValues(alpha: 0.2) : AppColors.terminalGreen.withValues(alpha: 0.2),
+                              borderColor: isAi
+                                  ? AppColors.manaCyan.withValues(alpha: 0.25)
+                                  : AppColors.terminalGreen.withValues(alpha: 0.25),
                               padding: const EdgeInsets.all(12),
                               child: isAi
-                                  ? DecryptText(text: msg['text']!, style: AppTypography.rajdhani(fontSize: 13, color: AppColors.textPrimary))
-                                  : Text(msg['text']!, style: AppTypography.rajdhani(fontSize: 13, color: AppColors.terminalGreen)),
+                                  ? DecryptText(
+                                      text: msg.content,
+                                      style: AppTypography.rajdhani(fontSize: 13, color: AppColors.textPrimary),
+                                    )
+                                  : Text(
+                                      msg.content,
+                                      style: AppTypography.rajdhani(fontSize: 13, color: AppColors.terminalGreen),
+                                    ),
                             ),
                           ),
                         ],
@@ -174,50 +400,116 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     );
                   }
 
-                  // Tactical Briefing Plan Card
+                  // Tactical Briefing Plan Card (Rule 10: Explicit User Approval Gate)
+                  if (plan == null) return const SizedBox.shrink();
+
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
+                    padding: const EdgeInsets.only(bottom: 14.0),
                     child: OrnatePanel(
                       cornerSize: 22,
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('[ TACTICAL BRIEF — WEEK PLAN ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
-                          Text('OPTIMAL QUEST SEQUENCE', style: AppTypography.orbitron(fontSize: 12, color: AppColors.textPrimary)),
-                          const _PlanRow(rank: 'S', title: 'FINALIZE CORE FEATURES', exp: 400, time: 'MON–WED'),
-                          const _PlanRow(rank: 'A', title: 'QA & BUG CRUSHING', exp: 250, time: 'THU'),
-                          const _PlanRow(rank: 'A', title: 'LAUNCH & MARKETING PUSH', exp: 300, time: 'FRI'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('[ TACTICAL BRIEF — STAGED PLAN ]', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.expFrom.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppColors.expFrom, width: 1),
+                                ),
+                                child: Text('+${plan.estimatedXp} TOTAL XP', style: AppTypography.monoStat(fontSize: 9, color: AppColors.expFrom)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(plan.goal.toUpperCase(), style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          Text('ESTIMATED DURATION: ${plan.durationDays} DAYS · ${plan.quests.length} OBJECTIVES', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
+                          const SizedBox(height: 10),
+
+                          // Staged Quest Rows
+                          ...plan.quests.map((q) => _StagedQuestRow(quest: q)),
+
                           const DiamondDivider(),
+
+                          // Approval Action Bar
                           Row(
                             children: [
+                              // Discard
                               Expanded(
+                                flex: 1,
                                 child: PressableCard(
-                                  onTap: () => setState(() => _planVisible = false),
+                                  onTap: () => ref.read(aiCoachNotifierProvider.notifier).rejectPlan(plan.id),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 10),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.3)),
+                                      border: Border.all(color: AppColors.dangerRed.withValues(alpha: 0.4)),
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text('EDIT', style: AppTypography.orbitron(fontSize: 9, color: AppColors.textSecondary)),
+                                    child: Text('DISCARD', style: AppTypography.orbitron(fontSize: 8, color: AppColors.dangerRed)),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
+
+                              // Edit
                               Expanded(
+                                flex: 1,
                                 child: PressableCard(
-                                  onTap: _acceptPlan,
+                                  onTap: () => _showEditPlanDialog(plan),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.4)),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text('EDIT', style: AppTypography.orbitron(fontSize: 8, color: AppColors.manaCyan)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+
+                              // Regenerate
+                              Expanded(
+                                flex: 1,
+                                child: PressableCard(
+                                  onTap: () => _showRegenerateDialog(plan),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppColors.rankB.withValues(alpha: 0.4)),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text('RETRY', style: AppTypography.orbitron(fontSize: 8, color: AppColors.rankB)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+
+                              // Accept & Deploy (Rule 10: Commit Gate)
+                              Expanded(
+                                flex: 2,
+                                child: PressableCard(
+                                  onTap: () => ref.read(aiCoachNotifierProvider.notifier).approvePlan(plan.id),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 10),
                                     decoration: BoxDecoration(
                                       color: AppColors.manaCyan,
                                       borderRadius: BorderRadius.circular(8),
-                                      boxShadow: const [BoxShadow(color: Color(0x663EE6F5), blurRadius: 16)],
+                                      boxShadow: const [BoxShadow(color: Color(0x663EE6F5), blurRadius: 14)],
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text('ACCEPT & DEPLOY', style: AppTypography.orbitron(fontSize: 9, color: Colors.black, fontWeight: FontWeight.bold)),
+                                    child: Text(
+                                      'ACCEPT & DEPLOY',
+                                      style: AppTypography.orbitron(fontSize: 9, color: Colors.black, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -231,9 +523,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
               ),
             ),
 
-            // Chips
+            // Quick Chips
             SizedBox(
-              height: 36,
+              height: 34,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -245,24 +537,24 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     child: PressableCard(
                       onTap: () => _sendMessage(chip.replaceAll(RegExp(r'[\[\]]'), '').trim()),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: AppColors.glassPanel,
                           borderRadius: BorderRadius.circular(999),
                           border: Border.all(color: AppColors.manaCyan.withValues(alpha: 0.2)),
                         ),
-                        child: Text(chip, style: AppTypography.monoStat(fontSize: 9, color: AppColors.manaCyan)),
+                        child: Text(chip, style: AppTypography.monoStat(fontSize: 8, color: AppColors.manaCyan)),
                       ),
                     ),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
             // Input Bar
             Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 8 + MediaQuery.of(context).padding.bottom),
+              padding: EdgeInsets.fromLTRB(16, 6, 16, 6 + MediaQuery.of(context).padding.bottom),
               child: GlassCard(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Row(
@@ -270,20 +562,28 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     Expanded(
                       child: TextField(
                         controller: _controller,
+                        enabled: !aiState.isThinking,
                         style: AppTypography.monoStat(fontSize: 13, color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
-                          hintText: '> Enter directive...',
-                          hintStyle: TextStyle(color: AppColors.textDisabled),
+                        decoration: InputDecoration(
+                          hintText: aiState.isThinking
+                              ? '> Processing...'
+                              : aiState.isOffline
+                                  ? '> Uplink offline...'
+                                  : '> Enter tactical directive...',
+                          hintStyle: const TextStyle(color: AppColors.textDisabled),
                           border: InputBorder.none,
                         ),
                         onSubmitted: _sendMessage,
                       ),
                     ),
                     ArisePressable(
-                      onTap: () => _sendMessage(_controller.text),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.arrow_upward, color: AppColors.manaCyan),
+                      onTap: aiState.isThinking ? null : () => _sendMessage(_controller.text),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(
+                          Icons.arrow_upward,
+                          color: aiState.isThinking ? AppColors.textDisabled : AppColors.manaCyan,
+                        ),
                       ),
                     ),
                   ],
@@ -297,34 +597,60 @@ class _AICoachScreenState extends State<AICoachScreen> {
   }
 }
 
-class _PlanRow extends StatelessWidget {
-  final String rank;
-  final String title;
-  final int exp;
-  final String time;
+class _StagedQuestRow extends StatelessWidget {
+  final AiPlanQuest quest;
 
-  const _PlanRow({required this.rank, required this.title, required this.exp, required this.time});
+  const _StagedQuestRow({required this.quest});
 
   @override
   Widget build(BuildContext context) {
+    Color rankColor = AppColors.rankB;
+    if (quest.rank == 'S') rankColor = AppColors.expFrom;
+    if (quest.rank == 'A') rankColor = AppColors.rankA;
+    if (quest.rank == 'D') rankColor = AppColors.rankD;
+    if (quest.rank == 'E') rankColor = AppColors.rankE;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6.0),
       child: GlassCard(
         padding: const EdgeInsets.all(8),
+        borderColor: rankColor.withValues(alpha: 0.2),
         child: Row(
           children: [
-            Text(rank, style: AppTypography.orbitron(fontSize: 12, color: AppColors.expFrom)),
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: rankColor.withValues(alpha: 0.15),
+                border: Border.all(color: rankColor),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                quest.rank,
+                style: AppTypography.orbitron(fontSize: 11, fontWeight: FontWeight.bold, color: rankColor),
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppTypography.orbitron(fontSize: 10, color: AppColors.textPrimary)),
-                  Text(time, style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
+                  Text(quest.title, style: AppTypography.orbitron(fontSize: 10, color: AppColors.textPrimary)),
+                  if (quest.description.isNotEmpty)
+                    Text(quest.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.rajdhani(fontSize: 10, color: AppColors.textSecondary)),
+                  if (quest.subquests.isNotEmpty)
+                    Text('⤷ ${quest.subquests.length} sub-tasks', style: AppTypography.monoStat(fontSize: 8, color: AppColors.manaCyan)),
                 ],
               ),
             ),
-            Text('+$exp', style: AppTypography.monoStat(fontSize: 9, color: AppColors.expFrom)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('+${quest.xpReward} XP', style: AppTypography.monoStat(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.expFrom)),
+                Text('${quest.targetDurationMinutes}M', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
+              ],
+            ),
           ],
         ),
       ),

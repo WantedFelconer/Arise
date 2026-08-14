@@ -5,7 +5,7 @@ import { MockAIProvider } from '../providers/mock.adapter';
 import { AiQuotaService } from '../quota/ai-quota.service';
 import { QuestService } from '../../quests/service/quest.service';
 import { QuestRepository } from '../../quests/repository/quest.repository';
-import { RewardCascadeService } from '../../quests/service/reward-cascade.service';
+import { RewardCascadeService } from '../../../core/reward-cascade.service';
 import { CharacterService } from '../../character/service/character.service';
 import { CharacterRepository } from '../../character/repository/character.repository';
 import { BossService } from '../../bosses/service/boss.service';

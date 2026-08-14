@@ -58,6 +58,7 @@ export class QuestService {
     const deadline = input.deadline ? new Date(input.deadline) : null;
 
     const quest = await this.questRepository.create({
+      id: input.id,
       userId,
       title: input.title,
       description: input.description,

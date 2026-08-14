@@ -14,6 +14,7 @@ abstract final class AppColors {
   static const Color manaCyan = Color(0xFF3EE6F5);
   static const Color secondaryTeal = Color(0xFF1FA9C2);
   static const Color cyanGlow = Color(0x593EE6F5); // 35% opacity cyan
+  static const Color warningAmber = Color(0xFFFFB703);
 
   // Text Colors
   static const Color textPrimary = Color(0xFFEAF6FF);

@@ -1,4 +1,4 @@
-# ARISE — Final Architecture, Hardening & Verification Handoff (Sprint 5)
+# ARISE — Final Architecture, Hardening & Release Audit Handoff
 
 ---
 
@@ -11,7 +11,7 @@
 |                                  FLUTTER CLIENTS                                  |
 |            Presentation  <--->  Application (Use Cases)  <--->  Domain             |
 |                                         |                                         |
-|                 Local Database (Drift / Isar) + Sync Engine Queue                 |
+|                 Local Database (Drift SQLite) + Offline Command Queue             |
 +------------------------------------------+----------------------------------------+
                                            | HTTPS / JSON (Idempotent Domain Commands)
                                            v
@@ -24,152 +24,130 @@
 |    - JwtAuthGuard (RS256 Bearer Token Verification)                               |
 |    - ZodValidationPipe (Strict DTO schema parsing & sanitization)                  |
 |                                                                                   |
-|  [Feature Modules (16 Total)]                                                     |
+|  [Feature Modules (21 Total)]                                                     |
 |    - auth             - character        - quests           - bosses              |
 |    - dungeons         - gates            - achievements     - screen-time         |
-|    - fitness          - mood             - notes            - reminders           |
-|    - notifications    - music            - settings         - statistics          |
-|    - analytics        - ai (planner / coach / quota)                              |
+|    - fitness          - notes            - reminders        - notifications       |
+|    - music            - settings         - statistics       - analytics           |
+|    - sync             - admin            - calendar         - integrations        |
+|    - ai (planner / coach / quota)                                                 |
 |                                                                                   |
 |  [Centralized Core Engines]                                                       |
 |    - RpgEngine (XP curves, Mana recovery, Boss damage, Streaks, Gate stability)   |
 |    - RewardCascadeService (Atomic single-transaction quest & gate resolution)     |
 |                                                                                   |
 |  [Persistence & Storage Layer]                                                    |
-|    - Prisma ORM (26 relational models with performance indexes)                   |
-|    - MemoryDb Fallback (Fast-path in-memory relational store for tests & sync)    |
-|    - BullMQ & Redis (Asynchronous background processing)                         |
+|    - PostgreSQL (Prisma ORM with normalized models & composite indexes)           |
+|    - MemoryDb Fallback (Fast-path in-memory relational store for tests)           |
+|    - Redis & BullMQ (Asynchronous background processing)                         |
 +-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Complete Module Inventory
+## 2. Local Development & Environment Setup
 
-All 16 backend modules adhere strictly to Clean Architecture (`controller` -> `service` -> `repository` -> `events`/`dto`/`validation`):
+### 2.1 Prerequisites
+- **Node.js**: v20.x or later
+- **pnpm / npm**: npm 10+ or pnpm 9+
+- **Flutter SDK**: 3.22.x or later (Dart 3.4+)
+- **PostgreSQL**: 15+ (optional for local memory testing, required for production)
+- **Redis**: 7+ (for rate limiting and job queues)
 
-| # | Module Name | Primary Responsibility & SRS References | Endpoints & Key Capabilities |
-|---|-------------|----------------------------------------|------------------------------|
-| 1 | `auth` | Authentication, Argon2id hashing, RS256 JWTs, token rotation (§7.1) | `POST /auth/signup`, `POST /auth/login`, `POST /auth/refresh`, `DELETE /auth/account`, `POST /auth/password-reset/*` |
-| 2 | `character` | Character progression ledger, XP/Mana management (§8.1) | `GET /character`, `GET /character/ledger`, `POST /character/avatar` |
-| 3 | `quests` | Quest state machine, subquests, recurring tasks (§8.4) | `GET /quests`, `POST /quests`, `PATCH /quests/:id`, `POST /quests/:id/complete`, `POST /quests/:id/pause` |
-| 4 | `bosses` | Boss entities, HP tracking, damage attribution (§8.2) | `GET /bosses`, `POST /bosses`, `GET /bosses/:id`, `PATCH /bosses/:id` |
-| 5 | `dungeons` | Multi-quest dungeon instances, stage progression (§8.3) | `GET /dungeons`, `POST /dungeons`, `POST /dungeons/:id/stages/:idx/clear` |
-| 6 | `gates` | Focus sessions, real-time stability, collapse penalties (§8.5) | `POST /gates/sessions`, `POST /gates/sessions/:id/complete`, `POST /gates/sessions/:id/collapse` |
-| 7 | `achievements` | Centralized badge and milestone unlock engine (§8.6) | `GET /achievements`, `GET /achievements/unlocked` |
-| 8 | `screen-time` | App usage logging, anti-cheat Mana recomputation (§10.1) | `POST /screen-time/sessions`, `GET /screen-time/insights`, `PUT /screen-time/categories/:pkg` |
-| 9 | `fitness` | Activity ingestion, threshold XP/Mana recovery (§10.2) | `POST /fitness/logs`, `GET /fitness/summary`, `GET /fitness/metrics` |
-| 10 | `mood` | Daily mood tracking & reflection (§10.4) | `POST /mood/entries`, `GET /mood/trends`, `GET /mood/history` |
-| 11 | `notes` | Knowledge capture, folders, tags, full-text search (§10.7) | `GET /notes`, `POST /notes`, `PATCH /notes/:id`, `DELETE /notes/:id`, `POST /notes/folders` |
-| 12 | `reminders` | Smart reminders, priority throttling, snooze (§10.8) | `POST /reminders`, `GET /reminders/due`, `POST /reminders/:id/snooze` |
-| 13 | `notifications` | In-app notification center & unread counts (§10.9) | `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all` |
-| 14 | `music` | Ambient focus audio track catalog & presets (§10.10) | `GET /music/tracks`, `GET /music/presets` |
-| 15 | `settings` | User profile, difficulty switching, GDPR data export (§11.1) | `GET /settings`, `PATCH /settings`, `POST /settings/difficulty`, `GET /settings/export` |
-| 16 | `statistics & analytics` | Consolidated lifetime metrics, multi-horizon rollups (§10.6) | `GET /stats`, `GET /analytics/rollups`, `GET /analytics/reports/monthly` |
-| 17 | `ai` | AI Planner (2-stage approval), AI Coach (grounded tools), Quotas (§10.3, §10.5) | `POST /ai/plan`, `POST /ai/plan/:id/approve`, `POST /ai/coach/chat`, `GET /ai/quota` |
+### 2.2 Backend Setup
+```bash
+# 1. Navigate to backend directory
+cd backend
 
----
+# 2. Install dependencies
+npm install
 
-## 3. Database Schema Architecture
+# 3. Configure environment
+cp .env.example .env
 
-The relational schema (`backend/src/db/prisma/schema.prisma`) comprises **26 models** fully normalized with compound indexes for high-frequency queries:
+# 4. Generate Prisma client & apply database migrations (if using PostgreSQL)
+npx prisma generate
+npx prisma migrate dev --name init
 
-```prisma
-// Core Identity & Auth
-User                     // id, email, passwordHash, difficultyMode, chronotype, deletedAt
-RefreshToken             // id, userId, tokenHash, expiresAt, revokedAt, replacedByToken
-PasswordResetToken       // id, userId, tokenHash, expiresAt, usedAt
+# 5. Run development server
+npm run start:dev
+# Backend runs at: http://localhost:3000/api/v1 (Health check: http://localhost:3000/health)
+```
 
-// Character & RPG Ledger
-Character                // id, userId, level, totalXp, currentMana, maxMana, rank, coins, gems
-XpTransaction            // id, characterId, amount, statKey, sourceType, sourceId, createdAt
-ManaTransaction          // id, characterId, delta, sourceType, sourceId, reason, createdAt
-UserAchievement          // id, userId, achievementKey, unlockedAt
+### 2.3 Flutter Frontend Setup
+```bash
+# 1. Navigate to flutter directory
+cd "flutter frontend"
 
-// Gameplay Entities
-Quest                    // id, userId, title, status, difficulty, estimatedMinutes, bossId, parentQuestId
-Boss                     // id, userId, title, hpMax, hpCurrent, status, rewards
-DungeonInstance          // id, userId, title, totalStages, currentStage, status
-GateFocusSession         // id, userId, plannedDurationS, actualDurationS, status, stabilityFinal
+# 2. Get dependencies
+flutter pub get
 
-// Intelligence & Life Tracker
-ScreenTimeSession        // id, userId, appPackage, category, durationS, manaModifierApplied, occurredAt
-AppCategoryOverride      // id, userId, appPackage, category, manaModifierPerMinute
-FitnessLog               // id, userId, logType, value, unit, recordedAt
-MoodEntry                // id, userId, score, journalSnippet, recordedAt
-Note                     // id, userId, folderId, title, body, tags, createdAt, updatedAt
-NoteFolder               // id, userId, name, parentFolderId
-Reminder                 // id, userId, title, dueAt, priority, isSnoozed, snoozedUntil
-InAppNotification        // id, userId, title, body, type, isRead, createdAt
-DailyAiUsage             // id, userId, date, count
-FeatureFlag              // id, flagKey, enabled, userId
+# 3. Generate Drift SQLite code (if modifying database tables)
+dart run build_runner build --delete-conflicting-outputs
+
+# 4. Run application
+# For Chrome/Web:
+flutter run -d chrome
+
+# For Android (connects automatically to 10.0.2.2 on emulator):
+flutter run -d emulator-5554
+
+# For Custom API Base URL:
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000/api/v1
 ```
 
 ---
 
-## 4. Offline-First & Authority Contract Guarantees
+## 3. Automated Test Suites & Commands
 
-As codified in `.agents/rules/arise_flutter.md` (§6) and verified in `sprint5-offline-idempotency-audit.test.ts`:
+### 3.1 Backend Tests
+```bash
+cd backend
 
-1. **Client Optimistic UI**: Writes are applied immediately to client-side storage (Drift/Isar) for zero-latency UI updates.
-2. **Domain Command Sync**: Clients synchronize *commands* (`COMPLETE_QUEST`, `START_GATE`, `COLLAPSE_GATE`), never authoritative state (e.g. `SET_XP`, `SET_LEVEL`, `SET_MANA`).
-3. **Idempotency Replay**: Every command carries a unique `Idempotency-Key` header. Server returns cached original responses on network retransmits, guaranteeing zero duplicate XP or coin ledger entries.
-4. **Authoritative Reconciliation**: When client state differs from server recalculation, client reconciles toward the server response. Editable fields use Last-Write-Wins; reward-bearing operations are immutable.
-5. **AI Separation**: AI endpoints require live connectivity and fail gracefully with `503 AI_OFFLINE_UNAVAILABLE` rather than fabricating offline results.
+# Run entire test suite (42 test files, 195 tests)
+npm test
 
----
+# Run specific integration/security audits
+npx vitest run tests/sprint6-e2e-user-journey.test.ts
+npx vitest run tests/sprint5-security-audit.test.ts
+npx vitest run tests/sprint5-sync-anti-cheat.test.ts
+npx vitest run tests/sprint5-offline-idempotency-audit.test.ts
+```
 
-## 5. Security & Anti-Cheat Controls
+### 3.2 Flutter Tests
+```bash
+cd "flutter frontend"
 
-The 16 attack vectors audited and verified in `sprint5-security-audit.test.ts`:
+# Run all Flutter tests (64 tests across 10 modules)
+flutter test
 
-| Vector # | Attack Description | Defense Implementation | Verification Evidence |
-|:---:|---|---|---|
-| **#1** | Client submits `{ xp: 999999999 }` | Rejected/ignored by schema; XP only awarded via server calculations | `sprint5-security-audit.test.ts` (Attack 1: PASS) |
-| **#2** | Client submits `{ level: 999 }` | Level is calculated purely server-side from `xp_transactions` ledger | `sprint5-security-audit.test.ts` (Attack 2: PASS) |
-| **#3** | Client submits `{ mana: 999999 }` on screen-time ingest | Recomputed strictly from `screen_time_modifiers.json` rules | `sprint5-security-audit.test.ts` (Attack 3: PASS) |
-| **#4** | Client submits `{ currentHp: 0 }` on boss | No direct boss HP mutation route exists; HP changes only via reward cascade | `sprint5-security-audit.test.ts` (Attack 4: PASS) |
-| **#5** | Client fabricates achievement unlock | Centralized `AchievementService` checks ledger thresholds server-side | `sprint5-security-audit.test.ts` (Attack 5: PASS) |
-| **#6** | Replaying duplicate quest completions | `RewardCascadeService` rejects already-completed with 409 / caches 200 with idempotency key | `sprint5-security-audit.test.ts` (Attack 6: PASS) |
-| **#7** | Gate session duration spoofing | Server calculates elapsed duration from `started_at` to `now`; rejects fake completion with 400 | `sprint5-security-audit.test.ts` (Attack 7: PASS) |
-| **#8** | Client sets `{ premium: true }` / flips AI feature flags | Feature flags are read-only; no client-writable mutation surface exists | `sprint5-security-audit.test.ts` (Attack 8: PASS) |
-| **#9** | Concurrent AI quota race conditions | `AiQuotaService` acquires per-user async mutex lock during quota increment | `sprint5-security-audit.test.ts` (Attack 9: PASS) |
-| **#10** | Unauthenticated AI requests | Protected by `JwtAuthGuard`; rejects with 401 | `sprint5-security-audit.test.ts` (Attack 10: PASS) |
-| **#11** | Secret / API key leakage | Zero AI provider keys, JWT secrets, or DB strings exposed in payloads or headers | `sprint5-security-audit.test.ts` (Attack 11: PASS) |
-| **#12** | Cross-tenant authorization tampering | Strict user scoping across all 16 modules; returns 404/403 for other tenants' resources | `sprint5-security-audit.test.ts` (Attack 12: PASS) |
-| **#13** | Refresh token reuse (AC-AUTH-004) | Reuse detection revokes entire token family & invalidates all active sessions | `sprint5-security-audit.test.ts` (Attack 13: PASS) |
-| **#14** | Soft-deleted user authentication | Deleted accounts immediately rejected on login, refresh, and protected routes | `sprint5-security-audit.test.ts` (Attack 14: PASS) |
-| **#15** | Rate limiting / spam abuse | Sliding window IP rate limiter returns 429 upon threshold breach | `sprint5-security-audit.test.ts` (Attack 15: PASS) |
-| **#16** | Stored XSS in AI prompts / titles | HTML sanitization strips `<script>` tags and JavaScript event handlers | `sprint5-security-audit.test.ts` (Attack 16: PASS) |
+# Run End-to-End User Journey test suite
+flutter test test/e2e/complete_user_journey_test.dart
 
----
-
-## 6. Performance & NFR Validation Evidence
-
-Measured during the test suite execution under nominal load:
-
-| NFR ID | Requirement Specification | Measured Performance | Result |
-|---|---|---|:---:|
-| **NFR-001** | Non-AI endpoint 95th-percentile response time < 300ms | **3.29ms** (p95 across 50 requests) | **PASS** |
-| **NFR-002** | AI Planner response time <= 15s | **5.03ms** (mock provider with retry) | **PASS** |
-| **NFR-005** | Multi-table reward cascade atomic transaction | Atomic memoryDb / Prisma transaction | **PASS** |
-| **NFR-008** | Offline replay safety with idempotency headers | Verified with cached response & 0 duplicate ledger rows | **PASS** |
+# Run specific unit/integration suites
+flutter test test/sync/sync_security_reconciliation_test.dart
+flutter test test/quests/offline_quest_flow_test.dart
+flutter test test/character/authoritative_character_test.dart
+flutter test test/boss_gate/boss_gate_integration_test.dart
+flutter test test/network/api_client_test.dart
+flutter test test/database/persistence_test.dart
+```
 
 ---
 
-## 7. Complete Environment Variable Reference
+## 4. Environment Variables Reference
 
 ```ini
-# Node & Server
+# Server
 NODE_ENV=production
 PORT=3000
 API_PREFIX=api/v1
 CORS_ORIGIN=http://localhost:3000,http://localhost:8443
 
-# Database (PostgreSQL + Prisma)
+# PostgreSQL Database
 DATABASE_URL=postgresql://arise_user:arise_secret_password@localhost:5432/arise_db?schema=public
 
-# Redis & Background Workers
+# Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
@@ -195,28 +173,34 @@ AI_DAILY_QUOTA=50                    # Per-user daily request quota
 
 ---
 
-## 8. Deferred Backlog (§18 Future Roadmap)
+## 5. Security & Anti-Cheat Architecture Summary
 
-The following capabilities have been explicitly preserved as future roadmap items and are cleanly isolated from the MVP deliverable:
-
-1. **Prestige System (§18 Phase 2)**: Reset character progression for permanent passive multiplier badges.
-2. **Cosmetics & Avatar Shop (§18 Phase 2)**: Shop for visual character accessories using coins and gems.
-3. **Daily/Weekly Meta-Challenges (§18 Phase 2)**: Global dynamic quest rotations.
-4. **Mystery Reward Chests (§18 Phase 2)**: Gacha-style loot reward chests.
-5. **Standalone Mood Journal & Correlation Engine (§18 Phase 2)**: Statistical regression between screen time and mood.
-6. **Future Self Time-Capsule Messages (§18 Phase 2)**: Scheduled motivational messages to oneself.
-7. **Knowledge Vault Bi-Directional Graph (§18 Phase 3)**: Obsidian-style networked thought visualizer.
-8. **Shared Bosses, Guilds & Social Feed (§18 Phase 3 & 4)**: Multiplayer co-op raids and social feeds.
-9. **Leaderboards & PvP Duels (§18 Phase 4)**: Competitive PvP arenas.
-10. **Spotify External Streaming Controller (§18 Phase 4)**: Direct Spotify OAuth playback.
-11. **Voice Notes & Whisper Transcription (§18 Phase 4)**: Speech-to-text audio notes.
-12. **Desktop Widgets & Native OS Add-ons (§18 Phase 4)**: Windows/macOS menu bar widgets.
+1. **Server-Authoritative Economy**: The backend recomputes all XP, Mana, Energy, Rank, Level, Boss Damage, and Achievements from raw domain events and transaction ledgers. Any client-submitted final numbers are strictly ignored.
+2. **Multi-Tenant Isolation**: All queries filter by `userId` extracted strictly from validated JWT claims. Direct object references across users return 404 Not Found.
+3. **Idempotency & Replay Protection**: Every state-altering mutation requires an `Idempotency-Key` header. Duplicate submissions replay the cached response with zero duplicate mutations.
+4. **Token Security & Reuse Detection**: Token families are tracked with single-use refresh tokens. Replaying an already-used token triggers immediate revocation of all active sessions for that account.
+5. **AI Safety & Propose-Only Contract**: AI plans and suggestions are staged with status `pending_approval`. No real domain objects or quests are created without explicit user confirmation.
 
 ---
 
-## 9. Verification & Test Suite Summary
+## 6. Offline-First Architecture Summary
 
-- **Total Test Files**: 39
-- **Total Automated Tests**: 179
-- **Passing Rate**: 100% (0 errors, 0 flaky failures)
-- **Execution Time**: ~9.62s
+1. **Drift SQLite Single Source of Truth**: All local reads and writes route through persistent SQLite tables (`quests`, `character_snapshot`, `bosses`, `gate_sessions`, `dungeons`, `local_event_queue`).
+2. **Persistent Command Queue**: User operations are logged as domain commands with UUID idempotency keys, surviving process termination, backgrounding, and phone reboots.
+3. **Automatic Synchronization**: `SyncEngine` listens to network transitions and drains the queue via batch sync endpoints with exponential backoff (2s &rarr; 4s &rarr; 8s).
+4. **Authoritative Reconciliation**: Local optimistic predictions are reconciled against authoritative server responses upon reconnection.
+
+---
+
+## 7. Pre-Production Deployment Checklist
+
+- [x] All 42 backend vitest test files pass (195 tests)
+- [x] All 64 Flutter tests pass (0 failures)
+- [x] Full 22-step End-to-End User Journey verified in both backend and frontend test harnesses
+- [x] Database migrations verified with composite indexes and foreign key cascades
+- [x] Zero critical paths depend on in-memory implementations in production builds
+- [x] Rate limiting and XSS sanitization verified
+- [x] Refresh token reuse detection verified
+- [x] Network base URL environment configuration verified (`ApiConfig.auto()`)
+- [x] UI responsive layouts, safe area insets (`AriseLayoutInsets`), and dynamic date headers verified
+- [x] Audit report authored in `docs/MVP-VERIFICATION.md`

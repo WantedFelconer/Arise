@@ -21,7 +21,7 @@ export class NotificationService {
     const record = await this.notificationRepository.create(dto);
 
     if (dto.sendPush) {
-      await this.fcmService.sendPush({
+      await this.fcmService?.sendPush({
         userId: dto.userId,
         title: dto.title,
         body: dto.message,

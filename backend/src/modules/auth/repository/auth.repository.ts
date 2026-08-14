@@ -142,6 +142,10 @@ export class AuthRepository {
       theme: 'system_dark',
       soundEnabled: true,
       hapticsEnabled: true,
+      language: 'en',
+      privacy: { profileVisible: false },
+      dailyReminderTime: '09:00',
+      notificationPreferences: { push: true, email: false },
       createdAt: now,
       updatedAt: now,
     };

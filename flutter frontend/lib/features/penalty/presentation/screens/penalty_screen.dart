@@ -9,11 +9,19 @@ import '../../../../core/design_system/components/pressable_card.dart';
 class PenaltyScreen extends StatefulWidget {
   final VoidCallback onAcknowledge;
   final String missedQuest;
+  final int xpPenalty;
+  final int manaPenalty;
+  final String? reason;
+  final String difficultyMode;
 
   const PenaltyScreen({
     super.key,
     required this.onAcknowledge,
-    this.missedQuest = '10KM RUN',
+    this.missedQuest = 'FAILED OBJECTIVE',
+    this.xpPenalty = 150,
+    this.manaPenalty = 50,
+    this.reason,
+    this.difficultyMode = 'casual',
   });
 
   @override
@@ -77,30 +85,36 @@ class _PenaltyScreenState extends State<PenaltyScreen> {
                     children: [
                       Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.dangerRed, shape: BoxShape.circle)),
                       const SizedBox(width: 8),
-                      Text('SYSTEM ALERT — PENALTY PROTOCOL INITIATED', style: AppTypography.monoStat(fontSize: 11, color: AppColors.dangerRed)),
+                      Text(
+                        'SYSTEM ALERT — PENALTY PROTOCOL INITIATED [${widget.difficultyMode.toUpperCase()} MODE]',
+                        style: AppTypography.monoStat(fontSize: 10, color: AppColors.dangerRed),
+                      ),
                       const SizedBox(width: 8),
                       Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.dangerRed, shape: BoxShape.circle)),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'PENALTY QUEST ASSIGNED',
+                    'PENALTY ASSIGNED',
                     style: AppTypography.orbitron(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.dangerRed),
                   ),
                   const DiamondDivider(color: AppColors.dangerRed),
                   const SizedBox(height: 12),
 
-                  // Missed Quest Card
+                  // Missed Quest / Gate Card
                   GlassCard(
                     borderColor: AppColors.dangerRed.withValues(alpha: 0.4),
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('FAILED QUEST', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+                        Text('FAILED OBJECTIVE', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
                         Text(widget.missedQuest, style: AppTypography.orbitron(fontSize: 16, color: AppColors.textPrimary)),
                         const SizedBox(height: 4),
-                        Text('Daily quota not met. The System does not tolerate inaction.', style: AppTypography.rajdhani(fontSize: 12, color: AppColors.dangerRed)),
+                        Text(
+                          widget.reason ?? 'Daily quota or Gate expedition collapsed. The System does not tolerate inaction.',
+                          style: AppTypography.rajdhani(fontSize: 12, color: AppColors.dangerRed),
+                        ),
                       ],
                     ),
                   ),
@@ -113,11 +127,14 @@ class _PenaltyScreenState extends State<PenaltyScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('CONSEQUENCE ISSUED', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
+                        Text('CONSEQUENCES APPLIED', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textSecondary)),
                         const SizedBox(height: 8),
-                        const _ConsequenceRow(icon: '−', label: '−150 EXP', desc: 'Immediate deduction', color: AppColors.dangerRed),
-                        const _ConsequenceRow(icon: '○', label: 'PENALTY QUEST', desc: '200 Squats — complete within 24H', color: AppColors.rankA),
-                        const _ConsequenceRow(icon: '⚡', label: 'STAT DECAY', desc: 'STR −1 if quest not cleared', color: AppColors.dangerRed),
+                        _ConsequenceRow(icon: '−', label: '−${widget.xpPenalty} EXP', desc: 'Progression ledger penalty', color: AppColors.dangerRed),
+                        _ConsequenceRow(icon: '⚡', label: '−${widget.manaPenalty} MANA', desc: 'Mental exhaustion penalty', color: AppColors.dangerRed),
+                        if (widget.difficultyMode == 'hardcore')
+                          const _ConsequenceRow(icon: '💀', label: 'BOSS RECOVERY', desc: '+15% Boss HP regeneration triggered', color: AppColors.rankA)
+                        else
+                          const _ConsequenceRow(icon: '○', label: 'RECOVERY QUEST', desc: 'Complete 1 quest to restore stability', color: AppColors.rankA),
                       ],
                     ),
                   ),
@@ -148,12 +165,15 @@ class _PenaltyScreenState extends State<PenaltyScreen> {
                         color: AppColors.dangerRed.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.dangerRed),
-                        boxShadow: const [BoxShadow(color: Color(0x66FF2E4D), blurRadius: 20)],
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        '[ I UNDERSTAND. I WILL NOT FAIL AGAIN. ]',
-                        style: AppTypography.orbitron(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dangerRed),
+                        _acknowledged ? 'ACKNOWLEDGED' : 'ACCEPT PENALTY PROTOCOL',
+                        style: AppTypography.orbitron(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.dangerRed,
+                        ),
                       ),
                     ),
                   ),
@@ -183,27 +203,23 @@ class _ConsequenceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
           Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: color.withValues(alpha: 0.4)),
-            ),
+            width: 20,
             alignment: Alignment.center,
-            child: Text(icon, style: TextStyle(color: color, fontSize: 12)),
+            child: Text(icon, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
           ),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTypography.orbitron(fontSize: 11, color: color)),
-              Text(desc, style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
-            ],
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: AppTypography.orbitron(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+                Text(desc, style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            ),
           ),
         ],
       ),

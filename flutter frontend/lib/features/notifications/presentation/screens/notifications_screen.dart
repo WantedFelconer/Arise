@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/design_system/components/arise_back_button.dart';
@@ -9,20 +10,25 @@ import '../../../../core/design_system/components/glass_card.dart';
 import '../../../../core/design_system/components/glow_fab.dart';
 import '../../../../core/design_system/components/pressable_card.dart';
 import '../../../../core/utils/arise_layout_insets.dart';
+import '../../application/reminders_notifier.dart';
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
 
   const NotificationsScreen({super.key, required this.onBack});
 
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  String _activeTab = 'PRODUCTIVITY';
-  final List<int> _snoozedIds = [];
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   bool _showAddModal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(remindersNotifierProvider.notifier).loadAll());
+  }
 
   static const tabColors = {
     'PRODUCTIVITY': AppColors.manaCyan,
@@ -31,44 +37,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'SYSTEM': AppColors.rankB,
   };
 
-  final List<Map<String, dynamic>> _reminders = [
-    {'id': 1, 'icon': '⚔', 'title': 'DAILY QUEST CHECK-IN', 'schedule': '08:00 · DAILY', 'active': true, 'tab': 'PRODUCTIVITY', 'color': AppColors.manaCyan},
-    {'id': 2, 'icon': '🏆', 'title': 'FOCUS SESSION — NOON', 'schedule': '12:00 · MON-FRI', 'active': true, 'tab': 'PRODUCTIVITY', 'color': AppColors.manaCyan},
-    {'id': 3, 'icon': '📋', 'title': 'QUEST LOG REVIEW', 'schedule': '20:00 · DAILY', 'active': false, 'tab': 'PRODUCTIVITY', 'color': AppColors.manaCyan},
-    {'id': 4, 'icon': '💧', 'title': 'HYDRATION REMINDER', 'schedule': 'EVERY 2H', 'active': true, 'tab': 'WELLNESS', 'color': AppColors.mpFrom},
-    {'id': 5, 'icon': '🧘', 'title': 'MINDFULNESS WINDOW', 'schedule': '07:30 · DAILY', 'active': true, 'tab': 'WELLNESS', 'color': AppColors.mpFrom},
-    {'id': 6, 'icon': '🌙', 'title': 'SLEEP PROTOCOL INIT', 'schedule': '22:30 · DAILY', 'active': true, 'tab': 'WELLNESS', 'color': AppColors.mpFrom},
-    {'id': 7, 'icon': '🔥', 'title': 'STREAK GUARD', 'schedule': '21:00 · DAILY', 'active': true, 'tab': 'BEHAVIORAL', 'color': AppColors.rankD},
-    {'id': 8, 'icon': '📵', 'title': 'SCREEN LIMIT ENFORCE', 'schedule': '23:00 · DAILY', 'active': false, 'tab': 'BEHAVIORAL', 'color': AppColors.rankD},
-    {'id': 9, 'icon': '◈', 'title': 'SYSTEM UPLINK CHECK', 'schedule': 'ON APP OPEN', 'active': true, 'tab': 'SYSTEM', 'color': AppColors.rankB},
-    {'id': 10, 'icon': '⚠', 'title': 'PENALTY ALERT', 'schedule': 'OVERDUE TRIGGER', 'active': true, 'tab': 'SYSTEM', 'color': AppColors.rankA},
-    {'id': 11, 'icon': '🏅', 'title': 'LEVEL UP BROADCAST', 'schedule': 'ON ACHIEVEMENT', 'active': true, 'tab': 'SYSTEM', 'color': AppColors.rankB},
-  ];
-
-  void _toggle(int id) {
-    setState(() {
-      for (final r in _reminders) {
-        if (r['id'] == id) r['active'] = !(r['active'] as bool);
-      }
-    });
-  }
-
-  void _snooze(int id) {
-    setState(() => _snoozedIds.add(id));
-  }
-
-  void _addReminder(Map<String, dynamic> newReminder) {
-    setState(() {
-      _reminders.add(newReminder);
-      _activeTab = newReminder['tab'] as String;
-      _showAddModal = false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final filtered = _reminders.where((r) => r['tab'] == _activeTab).toList();
-    final activeColor = tabColors[_activeTab] ?? AppColors.manaCyan;
+    final state = ref.watch(remindersNotifierProvider);
+    final notifier = ref.read(remindersNotifierProvider.notifier);
+    final activeTab = state.activeTab;
+
+    // Filter reminders by active category tab
+    final filtered = state.reminders.where((r) => r.category.toUpperCase() == activeTab).toList();
+    final activeColor = tabColors[activeTab] ?? AppColors.manaCyan;
 
     return Scaffold(
       backgroundColor: AppColors.voidEdge,
@@ -87,11 +64,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       AriseBackButton(onPressed: widget.onBack),
                       Column(
                         children: [
-                          Text('[ ALERT REGISTRY ]', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
-                          Text('NOTIFICATIONS', style: AppTypography.orbitron(fontSize: 13, color: AppColors.textPrimary)),
+                          Text('[ ALERT & REMINDER REGISTRY ]', style: AppTypography.monoStat(fontSize: 8, color: AppColors.textSecondary)),
+                          Text('NOTIFICATIONS & ALERTS', style: AppTypography.orbitron(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                         ],
                       ),
-                      Text('${filtered.where((r) => r['active'] as bool).length}/${filtered.length}', style: AppTypography.monoStat(fontSize: 10, color: activeColor)),
+                      Text(
+                        '${filtered.where((r) => r.isActive).length}/${filtered.length}',
+                        style: AppTypography.monoStat(fontSize: 10, color: activeColor),
+                      ),
                     ],
                   ),
                 ),
@@ -103,13 +83,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     padding: const EdgeInsets.all(2),
                     child: Row(
                       children: ['PRODUCTIVITY', 'WELLNESS', 'BEHAVIORAL', 'SYSTEM'].map((tab) {
-                        final isActive = _activeTab == tab;
+                        final isActive = activeTab == tab;
                         final col = tabColors[tab] ?? AppColors.manaCyan;
                         final label = tab == 'PRODUCTIVITY' ? 'PROD' : tab == 'BEHAVIORAL' ? 'BEHAV' : tab;
 
                         return Expanded(
                           child: PressableCard(
-                            onTap: () => setState(() => _activeTab = tab),
+                            onTap: () => notifier.setActiveTab(tab),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
@@ -118,7 +98,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 border: Border(bottom: BorderSide(color: isActive ? col : Colors.transparent, width: 2)),
                               ),
                               alignment: Alignment.center,
-                              child: Text(label, style: AppTypography.orbitron(fontSize: 8, fontWeight: FontWeight.w700, color: isActive ? col : AppColors.textDisabled)),
+                              child: Text(
+                                label,
+                                style: AppTypography.orbitron(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive ? col : AppColors.textDisabled,
+                                ),
+                              ),
                             ),
                           ),
                         );
@@ -128,63 +115,90 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // List
+                // Reminder List
                 Expanded(
-                  child: ListView.builder(
-                    padding: EdgeInsets.fromLTRB(16, 0, 16, AriseLayoutInsets.bottomOverlayInset(context, extra: 56.0)),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, idx) {
-                      final item = filtered[idx];
-                      final id = item['id'] as int;
-                      final isActive = item['active'] as bool;
-                      final isSnoozed = _snoozedIds.contains(id);
-                      final color = item['color'] as Color;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: GlassCard(
-                          borderColor: isActive ? color.withValues(alpha: 0.25) : AppColors.glassBorder,
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                                alignment: Alignment.center,
-                                child: Text(item['icon'] as String, style: const TextStyle(fontSize: 18)),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              Text('◈', style: TextStyle(fontSize: 24, color: activeColor.withValues(alpha: 0.5))),
+                              const SizedBox(height: 6),
+                              Text('NO REMINDERS IN $activeTab', style: AppTypography.orbitron(fontSize: 10, color: AppColors.textDisabled)),
+                              const SizedBox(height: 2),
+                              Text('Tap + below to register a new system alert.', style: AppTypography.rajdhani(fontSize: 11, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: EdgeInsets.fromLTRB(16, 0, 16, AriseLayoutInsets.bottomOverlayInset(context, extra: 56.0)),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, idx) {
+                            final item = filtered[idx];
+                            final isActive = item.isActive;
+                            final color = activeColor;
+                            final scheduleStr = item.recurrence.toUpperCase();
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: GlassCard(
+                                borderColor: isActive ? color.withValues(alpha: 0.25) : AppColors.glassBorder,
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
                                   children: [
-                                    Text(item['title'] as String, style: AppTypography.orbitron(fontSize: 11, color: isActive ? AppColors.textPrimary : AppColors.textDisabled)),
-                                    Text('⏱ ${item['schedule']}', style: AppTypography.monoStat(fontSize: 8, color: color)),
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(item.icon, style: const TextStyle(fontSize: 18)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.title,
+                                            style: AppTypography.orbitron(
+                                              fontSize: 11,
+                                              color: isActive ? AppColors.textPrimary : AppColors.textDisabled,
+                                            ),
+                                          ),
+                                          Text(
+                                            '⏱ $scheduleStr${item.snoozeCount > 0 ? ' · SNOOZED (${item.snoozeCount}x)' : ''}',
+                                            style: AppTypography.monoStat(fontSize: 8, color: color),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isActive)
+                                      ArisePressable(
+                                        onTap: () => notifier.snoozeReminder(item.id, snoozeMinutes: 15),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.rankA.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text('ZZZ', style: AppTypography.monoStat(fontSize: 8, color: AppColors.rankA)),
+                                        ),
+                                      ),
+                                    const SizedBox(width: 8),
+                                    CustomSwitch(
+                                      value: isActive,
+                                      activeColor: color,
+                                      onChanged: (_) => notifier.toggleReminder(item.id),
+                                    ),
                                   ],
                                 ),
                               ),
-                              if (isActive && !isSnoozed)
-                                ArisePressable(
-                                  onTap: () => _snooze(id),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(color: AppColors.rankA.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                                    child: Text('ZZZ', style: AppTypography.monoStat(fontSize: 8, color: AppColors.rankA)),
-                                  ),
-                                ),
-                              const SizedBox(width: 8),
-                              CustomSwitch(
-                                value: isActive,
-                                activeColor: color,
-                                onChanged: (v) => _toggle(id),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -203,8 +217,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             if (_showAddModal)
               Positioned.fill(
                 child: _AddReminderModal(
+                  defaultCategory: activeTab,
                   onClose: () => setState(() => _showAddModal = false),
-                  onSave: _addReminder,
+                  onSave: (title, cat, icon, rec) {
+                    notifier.createReminder(
+                      title: title,
+                      category: cat,
+                      icon: icon,
+                      recurrence: rec,
+                    );
+                    setState(() => _showAddModal = false);
+                  },
                 ),
               ),
           ],
@@ -215,10 +238,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 class _AddReminderModal extends StatefulWidget {
+  final String defaultCategory;
   final VoidCallback onClose;
-  final ValueChanged<Map<String, dynamic>> onSave;
+  final Function(String title, String category, String icon, String recurrence) onSave;
 
   const _AddReminderModal({
+    required this.defaultCategory,
     required this.onClose,
     required this.onSave,
   });
@@ -229,25 +254,26 @@ class _AddReminderModal extends StatefulWidget {
 
 class _AddReminderModalState extends State<_AddReminderModal> {
   final _titleController = TextEditingController();
-  final _scheduleController = TextEditingController(text: '08:00 · DAILY');
-  String _tab = 'PRODUCTIVITY';
+  late String _tab;
   String _icon = '⚔';
+  String _recurrence = 'daily';
 
   static const icons = ['⚔', '🏆', '📋', '💧', '🧘', '🌙', '🔥', '📵', '◈', '⚠', '🏅'];
 
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.defaultCategory;
+  }
+
   void _handleSave() {
     if (_titleController.text.trim().isEmpty) return;
-    final color = _NotificationsScreenState.tabColors[_tab] ?? AppColors.manaCyan;
-    final newReminder = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'icon': _icon,
-      'title': _titleController.text.trim().toUpperCase(),
-      'schedule': _scheduleController.text.trim().isEmpty ? '08:00 · DAILY' : _scheduleController.text.trim().toUpperCase(),
-      'active': true,
-      'tab': _tab,
-      'color': color,
-    };
-    widget.onSave(newReminder);
+    widget.onSave(
+      _titleController.text.trim().toUpperCase(),
+      _tab,
+      _icon,
+      _recurrence,
+    );
   }
 
   @override
@@ -322,7 +348,14 @@ class _AddReminderModalState extends State<_AddReminderModal> {
                           border: Border.all(color: isSelected ? col : AppColors.glassBorder),
                         ),
                         alignment: Alignment.center,
-                        child: Text(label, style: AppTypography.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isSelected ? col : AppColors.textDisabled)),
+                        child: Text(
+                          label,
+                          style: AppTypography.orbitron(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? col : AppColors.textDisabled,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -362,20 +395,31 @@ class _AddReminderModalState extends State<_AddReminderModal> {
             ),
             const SizedBox(height: 12),
 
-            // Schedule input
-            Text('SCHEDULE / CADENCE', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
-            const SizedBox(height: 4),
-            GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: TextField(
-                controller: _scheduleController,
-                style: AppTypography.monoStat(fontSize: 12, color: themeColor),
-                decoration: const InputDecoration(
-                  hintText: '08:00 · DAILY or EVERY 2H',
-                  hintStyle: TextStyle(color: AppColors.textDisabled),
-                  border: InputBorder.none,
-                ),
-              ),
+            // Cadence input
+            Text('CADENCE', style: AppTypography.monoStat(fontSize: 9, color: AppColors.textDisabled)),
+            const SizedBox(height: 6),
+            Row(
+              children: ['daily', 'weekdays', 'weekly'].map((cad) {
+                final isSel = _recurrence == cad;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: PressableCard(
+                      onTap: () => setState(() => _recurrence = cad),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSel ? themeColor.withValues(alpha: 0.15) : AppColors.glassPanel,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: isSel ? themeColor : AppColors.glassBorder),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(cad.toUpperCase(), style: AppTypography.monoStat(fontSize: 8, color: isSel ? themeColor : AppColors.textDisabled)),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 20),
 

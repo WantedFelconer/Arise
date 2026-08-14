@@ -280,7 +280,7 @@ export class RpgEngine {
       return {
         xp: 0,
         manaDelta: 0,
-        statKey: (thresholds[0].statKey as StatKey) || 'fitness',
+        statKey: (thresholds[0]?.statKey as StatKey) || 'fitness',
         thresholdReached: false,
       };
     }
@@ -310,7 +310,7 @@ export class RpgEngine {
           return dateObj.toISOString().split('T')[0];
         }),
       ),
-    ).sort();
+    ).filter((d): d is string => typeof d === 'string' && d.length > 0).sort();
 
     if (uniqueDays.length === 0) {
       return { currentStreak: 0, longestStreak: 0 };
@@ -324,7 +324,9 @@ export class RpgEngine {
 
     let tempStreak = 1;
     for (let i = 1; i < dayTimestamps.length; i++) {
-      const diffDays = Math.round((dayTimestamps[i] - dayTimestamps[i - 1]) / MS_PER_DAY);
+      const currentTs = dayTimestamps[i] ?? 0;
+      const prevTs = dayTimestamps[i - 1] ?? 0;
+      const diffDays = Math.round((currentTs - prevTs) / MS_PER_DAY);
       if (diffDays === 1) {
         tempStreak++;
       } else {
@@ -343,7 +345,9 @@ export class RpgEngine {
       // Calculate backwards from last day
       let runningStreak = 1;
       for (let i = uniqueDays.length - 1; i > 0; i--) {
-        const diff = Math.round((dayTimestamps[i] - dayTimestamps[i - 1]) / MS_PER_DAY);
+        const currentTs = dayTimestamps[i] ?? 0;
+        const prevTs = dayTimestamps[i - 1] ?? 0;
+        const diff = Math.round((currentTs - prevTs) / MS_PER_DAY);
         if (diff === 1) {
           runningStreak++;
         } else {
