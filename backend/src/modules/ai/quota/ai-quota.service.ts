@@ -14,9 +14,18 @@ export class AiQuotaService {
   private readonly userLocks = new Map<string, Promise<void>>();
 
   constructor(@Optional() private readonly configService?: ConfigService) {
-    this.defaultDailyQuota =
-      this.configService?.get<number>('AI_DAILY_QUOTA') ||
-      parseInt(process.env.AI_DAILY_QUOTA || '50', 10);
+    this.defaultDailyQuota = 50;
+  }
+
+  private getLimit(): number {
+    if (this.configService) {
+      const internal = (this.configService as any)?.internalConfig?.AI_DAILY_QUOTA;
+      if (internal !== undefined) return Number(internal);
+    }
+    if (process.env.AI_DAILY_QUOTA) {
+      return parseInt(process.env.AI_DAILY_QUOTA, 10);
+    }
+    return this.defaultDailyQuota;
   }
 
   private getTodayKey(userId: string): string {
@@ -115,7 +124,7 @@ export class AiQuotaService {
     try {
       const key = this.getTodayKey(userId);
       const today = new Date().toISOString().split('T')[0] || '';
-      const limit = parseInt(process.env.AI_DAILY_QUOTA || '', 10) || this.defaultDailyQuota;
+      const limit = this.getLimit();
 
       let record = memoryDb.dailyAiUsage.get(key);
       if (!record) {
@@ -166,7 +175,7 @@ export class AiQuotaService {
     resetAt: Date;
   }> {
     const key = this.getTodayKey(userId);
-    const limit = parseInt(process.env.AI_DAILY_QUOTA || '', 10) || this.defaultDailyQuota;
+    const limit = this.getLimit();
     const record = memoryDb.dailyAiUsage.get(key);
     const usedToday = record ? record.count : 0;
 

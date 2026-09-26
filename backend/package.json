@@ -4,7 +4,7 @@
   "description": "ARISE Life Operating System - Modular Monolith Backend",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "prisma:generate": "prisma generate --schema=src/db/prisma/schema.prisma",
+    "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --schema=src/db/prisma/schema.prisma"
   },
   "dependencies": {
@@ -24,6 +24,8 @@
     "@nestjs/core": "^11.2.0",
     "@nestjs/platform-express": "^11.2.0",
     "@prisma/client": "^5.22.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
     "argon2": "^0.41.1",
     "bullmq": "^5.34.2",
     "cors": "^2.8.5",
