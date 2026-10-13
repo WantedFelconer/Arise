@@ -32,7 +32,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ZodValidationPipe());
 
   const port = configService.get<number>('PORT') || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`[ARISE Server] NestJS application running on http://localhost:${port}`);
 }
 

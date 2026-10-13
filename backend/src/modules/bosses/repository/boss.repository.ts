@@ -7,7 +7,7 @@ export class BossRepository {
   constructor(@Optional() private prisma?: PrismaService) {}
 
   private isDbAvailable(): boolean {
-    return Boolean(this.prisma && process.env.DATABASE_URL && process.env.NODE_ENV !== 'test');
+    return Boolean(this.prisma?.isConnected && process.env.DATABASE_URL && process.env.NODE_ENV !== 'test');
   }
 
   async findById(id: string, userId?: string) {

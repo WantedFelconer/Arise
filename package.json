@@ -9,6 +9,9 @@
     "build": "npm --prefix backend run build",
     "test": "npm --prefix backend run test",
     "test:flutter": "cd \"flutter frontend\" && flutter test",
+    "client:dev": "pnpm --dir client_web run dev",
+    "client:build": "pnpm --dir client_web run build",
+    "backend:start": "node backend/dist/main.js",
     "prisma:generate": "npm --prefix backend run prisma:generate",
     "prisma:migrate": "npm --prefix backend run prisma:migrate",
     "prisma:studio": "cd backend && npx prisma studio --schema=src/db/prisma/schema.prisma"

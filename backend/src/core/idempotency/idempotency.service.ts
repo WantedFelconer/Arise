@@ -14,7 +14,7 @@ export class IdempotencyService {
   constructor(@Optional() private prisma?: PrismaService) {}
 
   private isDbAvailable(): boolean {
-    return Boolean(this.prisma && process.env.DATABASE_URL && process.env.NODE_ENV !== 'test');
+    return Boolean(this.prisma?.isConnected && process.env.DATABASE_URL && process.env.NODE_ENV !== 'test');
   }
 
   private getKey(userId: string, idempotencyKey: string): string {
