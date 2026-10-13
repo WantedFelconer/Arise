@@ -1,10 +1,16 @@
+databases:
+  - name: arise-postgres
+    databaseName: arise
+    user: postgres
+    plan: free
+
 services:
   - type: web
     name: arise-backend
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
+    buildCommand: yarn install && yarn build
     startCommand: npm run start:prod
     healthCheckPath: /health
     autoDeploy: true
@@ -18,6 +24,8 @@ services:
       - key: AI_PROVIDER
         value: mock
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: arise-postgres
+          property: connectionString
       - key: REDIS_URL
         sync: false
