@@ -1,0 +1,1 @@
+ E:\\Project_Files\\Arise\\client_mobile\\.dart_tool\\flutter_build\\ae28278069135a6b0eb79933e41e96d2\\dart_build_result.json:  C:\\dev\\flutter\\bin\\cache\\dart-sdk\\version E:\\Project_Files\\Arise\\client_mobile\\.dart_tool\\package_config.json E:\\Project_Files\\Arise\\client_mobile\\pubspec.yaml e:\\project_files\\arise\\client_mobile\\.dart_tool\\package_config.json

@@ -1,0 +1,10 @@
+{
+  "description": "Transform daily tasks into an immersive gamified experience, empowering users to track progress, complete quests, and achieve personal goals in a dark-fantasy universe.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

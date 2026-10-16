@@ -1,0 +1,6 @@
+{
+  "summary": "Comprehensive updated Figma Make Master Prompt for ARISE including:\n1. Complete design system tokens, typography, and components.\n2. Full inventory of missing UI with newly added System Alarm & Behavioral Reminder screens.\n3. Explicit exclusion list of existing screens to prevent redundant generation.\n4. Structured sequential 3-part prompt breakdown by priority for Figma Make AI.",
+  "updatedAt": "2026-08-30T21:39:34.551285500Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

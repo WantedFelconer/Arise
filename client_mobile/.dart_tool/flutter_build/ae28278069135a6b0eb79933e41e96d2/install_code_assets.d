@@ -1,0 +1,1 @@
+ E:\\Project_Files\\Arise\\client_mobile\\.dart_tool\\flutter_build\\ae28278069135a6b0eb79933e41e96d2\\native_assets.json: 

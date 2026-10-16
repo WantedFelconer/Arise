@@ -1,0 +1,1 @@
+ E:\\Project_Files\\Arise\\flutter\ frontend\\.dart_tool\\flutter_build\\5fd865be80046a8ce4f07f8696503b71\\native_assets.json: 
