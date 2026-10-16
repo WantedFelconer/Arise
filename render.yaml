@@ -39,7 +39,6 @@ services:
   - type: web
     name: arise-web
     runtime: static
-    plan: free
     rootDir: client_web
     buildCommand: pnpm install && pnpm run build
     staticPublishPath: dist
