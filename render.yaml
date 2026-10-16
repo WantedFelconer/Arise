@@ -7,7 +7,7 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: node dist/main.js
     healthCheckPath: /health
     autoDeploy: true
@@ -31,7 +31,7 @@ services:
       - key: JWT_REFRESH_EXPIRATION
         value: 30d
       - key: REDIS_URL
-        sync: false
+        value: redis://localhost:6379
 
   # ---------------------------------------------------------------------------
   # 2. ARISE Web Frontend (React 19 / Vite Static Site)
